@@ -14,7 +14,7 @@ build() {
   arch="$2"
   output="$3"
   GOOS="$os" GOARCH="$arch" CGO_ENABLED=0 \
-    go build -trimpath -buildvcs=false -buildid= \
+    go build -trimpath -buildvcs=false \
       -ldflags "-s -w -X main.version=$VERSION" \
       -o "$DIST_DIR/$output" ./cmd/vbuild
 }

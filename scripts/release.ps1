@@ -20,7 +20,7 @@ function Build([string]$os, [string]$arch, [string]$output) {
   $env:GOARCH = $arch
   $env:CGO_ENABLED = "0"
   $outPath = Join-Path $distDir $output
-  go build -trimpath -buildvcs=false -buildid= -ldflags "-s -w -X main.version=$version" -o $outPath ./cmd/vbuild
+  go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=$version" -o $outPath ./cmd/vbuild
 }
 
 function WriteChecksum([string]$file) {

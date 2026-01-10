@@ -210,7 +210,7 @@ vbuild build
 
 Reproducibility:
 - `go.mod` pins the Go toolchain version.
-- Release builds use `-trimpath`, `-buildvcs=false`, `-buildid=` and `CGO_ENABLED=0` for deterministic output.
+- Release builds use `-trimpath`, `-buildvcs=false`, and `CGO_ENABLED=0` for deterministic output.
 
 ## License
 
