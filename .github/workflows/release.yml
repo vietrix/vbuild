@@ -2,13 +2,13 @@ name: release
 on:
   push:
     tags: ['v*']
-    tags-ignore: ['*-lastest']
 
 permissions:
   contents: write
 
 jobs:
   release:
+    if: ${{ !endsWith(github.ref_name, '-lastest') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
