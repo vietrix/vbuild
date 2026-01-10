@@ -2,12 +2,19 @@
 set -eu
 
 VERSION="${VERSION:-dev}"
-SUFFIX="$VERSION"
-
-case "$VERSION" in
-  latest) SUFFIX="lastest" ;;
-  *-lastest) SUFFIX="lastest" ;;
+want_latest=0
+case "${VBUILD_RELEASE_LATEST:-}" in
+  1|true|TRUE|yes|YES|on|ON) want_latest=1 ;;
 esac
+
+suffixes="$VERSION"
+case "$VERSION" in
+  latest) suffixes="lastest" ;;
+  *-lastest) suffixes="lastest" ;;
+esac
+if [ "$want_latest" -eq 1 ] && [ "$suffixes" != "lastest" ]; then
+  suffixes="$suffixes lastest"
+fi
 
 ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"
@@ -39,16 +46,18 @@ checksum() {
   exit 1
 }
 
-build linux amd64 "linux-amd64-$SUFFIX"
-build linux arm64 "linux-arm64-$SUFFIX"
-build darwin amd64 "darwin-amd64-$SUFFIX"
-build darwin arm64 "darwin-arm64-$SUFFIX"
-build windows amd64 "windows-amd64-$SUFFIX.exe"
+for suffix in $suffixes; do
+  build linux amd64 "linux-amd64-$suffix"
+  build linux arm64 "linux-arm64-$suffix"
+  build darwin amd64 "darwin-amd64-$suffix"
+  build darwin arm64 "darwin-arm64-$suffix"
+  build windows amd64 "windows-amd64-$suffix.exe"
 
-checksum "linux-amd64-$SUFFIX"
-checksum "linux-arm64-$SUFFIX"
-checksum "darwin-amd64-$SUFFIX"
-checksum "darwin-arm64-$SUFFIX"
-checksum "windows-amd64-$SUFFIX.exe"
+  checksum "linux-amd64-$suffix"
+  checksum "linux-arm64-$suffix"
+  checksum "darwin-amd64-$suffix"
+  checksum "darwin-arm64-$suffix"
+  checksum "windows-amd64-$suffix.exe"
+done
 
 echo "release artifacts in $DIST_DIR"

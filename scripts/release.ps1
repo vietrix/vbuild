@@ -5,10 +5,17 @@ if ([string]::IsNullOrWhiteSpace($version)) {
   $version = "dev"
 }
 
+$suffixes = @($version)
 if ($version -eq "latest" -or $version -match "-lastest$") {
-  $suffix = "lastest"
-} else {
-  $suffix = $version
+  $suffixes = @("lastest")
+}
+
+$latestFlag = $env:VBUILD_RELEASE_LATEST
+if (-not [string]::IsNullOrWhiteSpace($latestFlag)) {
+  $flag = $latestFlag.ToLowerInvariant()
+  if (@("1", "true", "yes", "on") -contains $flag -and -not ($suffixes -contains "lastest")) {
+    $suffixes += "lastest"
+  }
 }
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -37,16 +44,18 @@ function WriteChecksum([string]$file) {
   Set-Content -Path $checksumPath -Value $line -Encoding ASCII
 }
 
-Build "linux" "amd64" "linux-amd64-$suffix"
-Build "linux" "arm64" "linux-arm64-$suffix"
-Build "darwin" "amd64" "darwin-amd64-$suffix"
-Build "darwin" "arm64" "darwin-arm64-$suffix"
-Build "windows" "amd64" "windows-amd64-$suffix.exe"
+foreach ($suffix in $suffixes) {
+  Build "linux" "amd64" "linux-amd64-$suffix"
+  Build "linux" "arm64" "linux-arm64-$suffix"
+  Build "darwin" "amd64" "darwin-amd64-$suffix"
+  Build "darwin" "arm64" "darwin-arm64-$suffix"
+  Build "windows" "amd64" "windows-amd64-$suffix.exe"
 
-WriteChecksum "linux-amd64-$suffix"
-WriteChecksum "linux-arm64-$suffix"
-WriteChecksum "darwin-amd64-$suffix"
-WriteChecksum "darwin-arm64-$suffix"
-WriteChecksum "windows-amd64-$suffix.exe"
+  WriteChecksum "linux-amd64-$suffix"
+  WriteChecksum "linux-arm64-$suffix"
+  WriteChecksum "darwin-amd64-$suffix"
+  WriteChecksum "darwin-arm64-$suffix"
+  WriteChecksum "windows-amd64-$suffix.exe"
+}
 
 Write-Output "release artifacts in $distDir"

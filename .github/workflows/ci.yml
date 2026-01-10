@@ -12,5 +12,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.22.x'
-      - run: VBUILD_VAR_VERSION=ci go run ./cmd/vbuild test
-      - run: VBUILD_VAR_VERSION=ci go run ./cmd/vbuild build
+      - run: mkdir -p bin
+      - run: go build -o ./bin/vbuild ./cmd/vbuild
+      - run: VBUILD_VAR_VERSION=ci ./bin/vbuild test
+      - run: VBUILD_VAR_VERSION=ci ./bin/vbuild build

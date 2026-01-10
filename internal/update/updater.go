@@ -28,25 +28,49 @@ func Run(opts Options) error {
 		return err
 	}
 
-	suffix := assetSuffix(rel.TagName)
-	assetName, err := platform.AssetName(runtime.GOOS, runtime.GOARCH, suffix)
-	if err != nil {
-		return err
+	suffixes := []string{assetSuffix(rel.TagName)}
+	if opts.ToVersion == "" {
+		suffixes = []string{"lastest"}
+		if fallback := assetSuffix(rel.TagName); fallback != "lastest" {
+			suffixes = append(suffixes, fallback)
+		}
+	}
+
+	findAsset := func(name string) (string, string) {
+		assetURL := ""
+		checksumURL := ""
+		for _, item := range rel.Assets {
+			if item.Name == name {
+				assetURL = item.URL
+				continue
+			}
+			if item.Name == name+".sha256" {
+				checksumURL = item.URL
+			}
+		}
+		return assetURL, checksumURL
 	}
 
 	assetURL := ""
 	checksumURL := ""
-	for _, item := range rel.Assets {
-		if item.Name == assetName {
-			assetURL = item.URL
-			continue
+	assetName := ""
+	var candidates []string
+	for _, suffix := range suffixes {
+		name, err := platform.AssetName(runtime.GOOS, runtime.GOARCH, suffix)
+		if err != nil {
+			return err
 		}
-		if item.Name == assetName+".sha256" {
-			checksumURL = item.URL
+		candidates = append(candidates, name)
+		url, checksum := findAsset(name)
+		if url != "" {
+			assetURL = url
+			checksumURL = checksum
+			assetName = name
+			break
 		}
 	}
 	if assetURL == "" {
-		return fmt.Errorf("release %s missing asset %s", rel.TagName, assetName)
+		return fmt.Errorf("release %s missing asset %s", rel.TagName, strings.Join(candidates, " or "))
 	}
 
 	exePath, err := os.Executable()

@@ -2,6 +2,7 @@ name: release
 on:
   push:
     tags: ['v*']
+    tags-ignore: ['*-lastest']
 
 permissions:
   contents: write
@@ -14,19 +15,12 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.22.x'
-      - run: VBUILD_VAR_VERSION=${{ github.ref_name }} go run ./cmd/vbuild test
+      - run: mkdir -p bin
+      - run: go build -o ./bin/vbuild ./cmd/vbuild
+      - run: VBUILD_VAR_VERSION=${{ github.ref_name }} ./bin/vbuild test
       - run: chmod +x scripts/release.sh
-      - run: VBUILD_VAR_VERSION=${{ github.ref_name }} go run ./cmd/vbuild release
-      - name: Prepare release name
-        id: release_name
-        run: |
-          TAG="${{ github.ref_name }}"
-          NAME="$TAG"
-          case "$TAG" in
-            *-lastest) NAME="${TAG%-lastest}" ;;
-          esac
-          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+      - run: VBUILD_VAR_VERSION=${{ github.ref_name }} VBUILD_RELEASE_LATEST=1 ./bin/vbuild release
       - uses: softprops/action-gh-release@v2
         with:
-          name: ${{ steps.release_name.outputs.name }}
+          name: ${{ github.ref_name }}
           files: dist/*

@@ -1,5 +1,7 @@
 $ErrorActionPreference = "Stop"
 
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
 $version = $env:VBUILD_VERSION
 if ([string]::IsNullOrWhiteSpace($version)) {
   $version = "latest"
@@ -49,7 +51,49 @@ New-Item -ItemType Directory -Force -Path $installDir | Out-Null
 
 $dest = Join-Path $installDir "vbuild.exe"
 
-Invoke-WebRequest -Uri $url -OutFile $dest
+function Download-File([string]$uri, [string]$outFile) {
+  $headers = @{ "User-Agent" = "vbuild-installer" }
+  $maxAttempts = 3
+  for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+    try {
+      $params = @{
+        Uri                = $uri
+        OutFile            = $outFile
+        Headers            = $headers
+        MaximumRedirection = 10
+        TimeoutSec         = 60
+      }
+      if ($PSVersionTable.PSVersion.Major -lt 6) {
+        $params.UseBasicParsing = $true
+      }
+      Invoke-WebRequest @params
+      return
+    } catch {
+      if ($attempt -lt $maxAttempts) {
+        Start-Sleep -Seconds (2 * $attempt)
+        continue
+      }
+    }
+  }
+
+  $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
+  if ($curl) {
+    & $curl.Source -fsSL $uri -o $outFile
+    if ($LASTEXITCODE -eq 0) {
+      return
+    }
+  }
+
+  $bits = Get-Command Start-BitsTransfer -ErrorAction SilentlyContinue
+  if ($bits) {
+    Start-BitsTransfer -Source $uri -Destination $outFile
+    return
+  }
+
+  throw "download failed from $uri"
+}
+
+Download-File $url $dest
 
 $path = [Environment]::GetEnvironmentVariable("Path", "User")
 if (-not ($path -split ";" | Where-Object { $_ -eq $installDir })) {
