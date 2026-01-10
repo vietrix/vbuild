@@ -1,0 +1,38 @@
+workflow: "vbuild public"
+
+vars:
+  APP: vbuild
+  VERSION: dev
+
+env:
+  CGO_ENABLED: "0"
+
+tasks:
+  default:
+    desc: format and test
+    deps: [format, test]
+
+  format:
+    desc: format Go code
+    run:
+      - gofmt -w .
+
+  test:
+    desc: run tests
+    run:
+      - go test ./...
+
+  build:
+    desc: build local binary
+    run:
+      - go build -trimpath -buildvcs=false -buildid= -ldflags "-s -w -X main.version={{VERSION}}" -o {{APP}} ./cmd/vbuild
+
+  release:
+    desc: build release binaries
+    run:
+      - mkdir -p dist
+      - GOOS=linux GOARCH=amd64 go build -trimpath -buildvcs=false -buildid= -ldflags "-s -w -X main.version={{VERSION}}" -o dist/linux-amd64 ./cmd/vbuild
+      - GOOS=linux GOARCH=arm64 go build -trimpath -buildvcs=false -buildid= -ldflags "-s -w -X main.version={{VERSION}}" -o dist/linux-arm64 ./cmd/vbuild
+      - GOOS=darwin GOARCH=amd64 go build -trimpath -buildvcs=false -buildid= -ldflags "-s -w -X main.version={{VERSION}}" -o dist/darwin-amd64 ./cmd/vbuild
+      - GOOS=darwin GOARCH=arm64 go build -trimpath -buildvcs=false -buildid= -ldflags "-s -w -X main.version={{VERSION}}" -o dist/darwin-arm64 ./cmd/vbuild
+      - GOOS=windows GOARCH=amd64 go build -trimpath -buildvcs=false -buildid= -ldflags "-s -w -X main.version={{VERSION}}" -o dist/windows-amd64.exe ./cmd/vbuild
