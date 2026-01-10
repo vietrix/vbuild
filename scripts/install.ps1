@@ -30,20 +30,8 @@ switch ($archString) {
   }
 }
 
-if ($version -eq "latest") {
-  $suffix = "lastest"
-} elseif ($version -match "-lastest$") {
-  $suffix = "lastest"
-} else {
-  $suffix = $version
-}
-
-$asset = "windows-$archTag-$suffix.exe"
-
-if ($version -eq "latest") {
-  $url = "https://github.com/vietrix/vbuild/releases/latest/download/$asset"
-} else {
-  $url = "https://github.com/vietrix/vbuild/releases/download/$version/$asset"
+if ($version -match "-lastest$") {
+  throw "unsupported version suffix '-lastest'; use a version tag like v0.0.3"
 }
 
 $installDir = Join-Path $env:USERPROFILE "AppData\Local\Programs\vbuild"
@@ -135,22 +123,19 @@ function Download-File([string]$uri, [string]$outFile) {
   throw "download failed from $uri"
 }
 
+$tag = $version
 if ($version -eq "latest") {
-  if (-not (Download-File $url $dest)) {
-    $tag = Get-LatestTag
-    if ([string]::IsNullOrWhiteSpace($tag)) {
-      throw "failed to resolve latest release tag"
-    }
-    $asset = "windows-$archTag-$tag.exe"
-    $url = "https://github.com/vietrix/vbuild/releases/download/$tag/$asset"
-    if (-not (Download-File $url $dest)) {
-      throw "release asset not found: $url"
-    }
+  $tag = Get-LatestTag
+  if ([string]::IsNullOrWhiteSpace($tag)) {
+    throw "failed to resolve latest release tag"
   }
-} else {
-  if (-not (Download-File $url $dest)) {
-    throw "release asset not found: $url"
-  }
+}
+
+$asset = "windows-$archTag-$tag.exe"
+$url = "https://github.com/vietrix/vbuild/releases/download/$tag/$asset"
+
+if (-not (Download-File $url $dest)) {
+  throw "release asset not found: $url"
 }
 
 $path = [Environment]::GetEnvironmentVariable("Path", "User")

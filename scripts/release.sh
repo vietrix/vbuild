@@ -2,19 +2,6 @@
 set -eu
 
 VERSION="${VERSION:-dev}"
-want_latest=0
-case "${VBUILD_RELEASE_LATEST:-}" in
-  1|true|TRUE|yes|YES|on|ON) want_latest=1 ;;
-esac
-
-suffixes="$VERSION"
-case "$VERSION" in
-  latest) suffixes="lastest" ;;
-  *-lastest) suffixes="lastest" ;;
-esac
-if [ "$want_latest" -eq 1 ] && [ "$suffixes" != "lastest" ]; then
-  suffixes="$suffixes lastest"
-fi
 
 ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"
@@ -46,18 +33,16 @@ checksum() {
   exit 1
 }
 
-for suffix in $suffixes; do
-  build linux amd64 "linux-amd64-$suffix"
-  build linux arm64 "linux-arm64-$suffix"
-  build darwin amd64 "darwin-amd64-$suffix"
-  build darwin arm64 "darwin-arm64-$suffix"
-  build windows amd64 "windows-amd64-$suffix.exe"
+build linux amd64 "linux-amd64-$VERSION"
+build linux arm64 "linux-arm64-$VERSION"
+build darwin amd64 "darwin-amd64-$VERSION"
+build darwin arm64 "darwin-arm64-$VERSION"
+build windows amd64 "windows-amd64-$VERSION.exe"
 
-  checksum "linux-amd64-$suffix"
-  checksum "linux-arm64-$suffix"
-  checksum "darwin-amd64-$suffix"
-  checksum "darwin-arm64-$suffix"
-  checksum "windows-amd64-$suffix.exe"
-done
+checksum "linux-amd64-$VERSION"
+checksum "linux-arm64-$VERSION"
+checksum "darwin-amd64-$VERSION"
+checksum "darwin-arm64-$VERSION"
+checksum "windows-amd64-$VERSION.exe"
 
 echo "release artifacts in $DIST_DIR"

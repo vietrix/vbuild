@@ -33,18 +33,6 @@ tasks:
       - |
         set -eu
         version="{{VERSION}}"
-        suffixes="$version"
-        case "$version" in
-          latest) suffixes="lastest" ;;
-          *-lastest) suffixes="lastest" ;;
-        esac
-        case "${VBUILD_RELEASE_LATEST:-}" in
-          1|true|TRUE|yes|YES|on|ON)
-            if [ "$suffixes" != "lastest" ]; then
-              suffixes="$suffixes lastest"
-            fi
-            ;;
-        esac
         mkdir -p dist
         checksum_cmd=""
         checksum_args=""
@@ -65,28 +53,26 @@ tasks:
             (cd dist && $checksum_cmd "$file" > "$file.sha256")
           fi
         }
-        for suffix in $suffixes; do
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-            go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=$version" \
-              -o "dist/linux-amd64-$suffix" ./cmd/vbuild
-          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
-            go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=$version" \
-              -o "dist/linux-arm64-$suffix" ./cmd/vbuild
-          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 \
-            go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=$version" \
-              -o "dist/darwin-amd64-$suffix" ./cmd/vbuild
-          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 \
-            go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=$version" \
-              -o "dist/darwin-arm64-$suffix" ./cmd/vbuild
-          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 \
-            go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=$version" \
-              -o "dist/windows-amd64-$suffix.exe" ./cmd/vbuild
-          write_checksum "linux-amd64-$suffix"
-          write_checksum "linux-arm64-$suffix"
-          write_checksum "darwin-amd64-$suffix"
-          write_checksum "darwin-arm64-$suffix"
-          write_checksum "windows-amd64-$suffix.exe"
-        done
+        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+          go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=$version" \
+            -o "dist/linux-amd64-$version" ./cmd/vbuild
+        CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
+          go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=$version" \
+            -o "dist/linux-arm64-$version" ./cmd/vbuild
+        CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 \
+          go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=$version" \
+            -o "dist/darwin-amd64-$version" ./cmd/vbuild
+        CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 \
+          go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=$version" \
+            -o "dist/darwin-arm64-$version" ./cmd/vbuild
+        CGO_ENABLED=0 GOOS=windows GOARCH=amd64 \
+          go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=$version" \
+            -o "dist/windows-amd64-$version.exe" ./cmd/vbuild
+        write_checksum "linux-amd64-$version"
+        write_checksum "linux-arm64-$version"
+        write_checksum "darwin-amd64-$version"
+        write_checksum "darwin-arm64-$version"
+        write_checksum "windows-amd64-$version.exe"
 
   release-windows:
     desc: build release binaries (windows)
@@ -96,17 +82,6 @@ tasks:
         $version = "{{VERSION}}"
         if ([string]::IsNullOrWhiteSpace($version)) {
           $version = "dev"
-        }
-        $suffixes = @($version)
-        if ($version -eq "latest" -or $version -match "-lastest$") {
-          $suffixes = @("lastest")
-        }
-        $latestFlag = $env:VBUILD_RELEASE_LATEST
-        if (-not [string]::IsNullOrWhiteSpace($latestFlag)) {
-          $flag = $latestFlag.ToLowerInvariant()
-          if (@("1", "true", "yes", "on") -contains $flag -and -not ($suffixes -contains "lastest")) {
-            $suffixes += "lastest"
-          }
         }
         $distDir = "dist"
         if (-not (Test-Path $distDir)) {
@@ -118,36 +93,34 @@ tasks:
           $checksumPath = Join-Path $distDir "$fileName.sha256"
           Set-Content -Path $checksumPath -Value $line -Encoding ASCII
         }
-        foreach ($suffix in $suffixes) {
-          $env:CGO_ENABLED = "0"
+        $env:CGO_ENABLED = "0"
 
-          $env:GOOS = "linux"
-          $env:GOARCH = "amd64"
-          $out = Join-Path $distDir "linux-amd64-$suffix"
-          go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=$version" -o $out ./cmd/vbuild
-          Write-Checksum $out "linux-amd64-$suffix"
+        $env:GOOS = "linux"
+        $env:GOARCH = "amd64"
+        $out = Join-Path $distDir "linux-amd64-$version"
+        go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=$version" -o $out ./cmd/vbuild
+        Write-Checksum $out "linux-amd64-$version"
 
-          $env:GOOS = "linux"
-          $env:GOARCH = "arm64"
-          $out = Join-Path $distDir "linux-arm64-$suffix"
-          go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=$version" -o $out ./cmd/vbuild
-          Write-Checksum $out "linux-arm64-$suffix"
+        $env:GOOS = "linux"
+        $env:GOARCH = "arm64"
+        $out = Join-Path $distDir "linux-arm64-$version"
+        go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=$version" -o $out ./cmd/vbuild
+        Write-Checksum $out "linux-arm64-$version"
 
-          $env:GOOS = "darwin"
-          $env:GOARCH = "amd64"
-          $out = Join-Path $distDir "darwin-amd64-$suffix"
-          go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=$version" -o $out ./cmd/vbuild
-          Write-Checksum $out "darwin-amd64-$suffix"
+        $env:GOOS = "darwin"
+        $env:GOARCH = "amd64"
+        $out = Join-Path $distDir "darwin-amd64-$version"
+        go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=$version" -o $out ./cmd/vbuild
+        Write-Checksum $out "darwin-amd64-$version"
 
-          $env:GOOS = "darwin"
-          $env:GOARCH = "arm64"
-          $out = Join-Path $distDir "darwin-arm64-$suffix"
-          go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=$version" -o $out ./cmd/vbuild
-          Write-Checksum $out "darwin-arm64-$suffix"
+        $env:GOOS = "darwin"
+        $env:GOARCH = "arm64"
+        $out = Join-Path $distDir "darwin-arm64-$version"
+        go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=$version" -o $out ./cmd/vbuild
+        Write-Checksum $out "darwin-arm64-$version"
 
-          $env:GOOS = "windows"
-          $env:GOARCH = "amd64"
-          $out = Join-Path $distDir "windows-amd64-$suffix.exe"
-          go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=$version" -o $out ./cmd/vbuild
-          Write-Checksum $out "windows-amd64-$suffix.exe"
-        }
+        $env:GOOS = "windows"
+        $env:GOARCH = "amd64"
+        $out = Join-Path $distDir "windows-amd64-$version.exe"
+        go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=$version" -o $out ./cmd/vbuild
+        Write-Checksum $out "windows-amd64-$version.exe"

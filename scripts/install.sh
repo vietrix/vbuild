@@ -24,21 +24,12 @@ case "$ARCH" in
     ;;
 esac
 
-if [ "$VERSION" = "latest" ]; then
-  SUFFIX="lastest"
-elif [ "${VERSION%-lastest}" != "$VERSION" ]; then
-  SUFFIX="lastest"
-else
-  SUFFIX="$VERSION"
-fi
-
-ASSET="$OS-$ARCH-$SUFFIX"
-
-if [ "$VERSION" = "latest" ]; then
-  URL="https://github.com/vietrix/vbuild/releases/latest/download/$ASSET"
-else
-  URL="https://github.com/vietrix/vbuild/releases/download/$VERSION/$ASSET"
-fi
+case "$VERSION" in
+  *-lastest)
+    echo "unsupported version suffix '-lastest'; use a version tag like v0.0.3" >&2
+    exit 1
+    ;;
+esac
 
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
@@ -72,25 +63,22 @@ fetch_latest_tag() {
   return 1
 }
 
-if ! download "$URL"; then
-  if [ "$VERSION" = "latest" ]; then
-    tag="$(fetch_latest_tag | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
-    if [ -n "$tag" ]; then
-      ASSET="$OS-$ARCH-$tag"
-      URL="https://github.com/vietrix/vbuild/releases/download/$tag/$ASSET"
-      download "$URL" || {
-        echo "failed to download $URL" >&2
-        exit 1
-      }
-    else
-      echo "failed to resolve latest release tag" >&2
-      exit 1
-    fi
-  else
-    echo "failed to download $URL" >&2
+tag="$VERSION"
+if [ "$VERSION" = "latest" ]; then
+  tag="$(fetch_latest_tag | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
+  if [ -z "$tag" ]; then
+    echo "failed to resolve latest release tag" >&2
     exit 1
   fi
 fi
+
+ASSET="$OS-$ARCH-$tag"
+URL="https://github.com/vietrix/vbuild/releases/download/$tag/$ASSET"
+
+download "$URL" || {
+  echo "failed to download $URL" >&2
+  exit 1
+}
 
 chmod 755 "$BIN_PATH"
 
