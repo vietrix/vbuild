@@ -28,11 +28,11 @@ tasks:
       - go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version={{VERSION}}" -o {{APP}} ./cmd/vbuild
 
   release:
-    desc: build release binaries
+    desc: build release binaries (unix)
     run:
-      - mkdir -p dist
-      - GOOS=linux GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version={{VERSION}}" -o dist/linux-amd64 ./cmd/vbuild
-      - GOOS=linux GOARCH=arm64 go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version={{VERSION}}" -o dist/linux-arm64 ./cmd/vbuild
-      - GOOS=darwin GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version={{VERSION}}" -o dist/darwin-amd64 ./cmd/vbuild
-      - GOOS=darwin GOARCH=arm64 go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version={{VERSION}}" -o dist/darwin-arm64 ./cmd/vbuild
-      - GOOS=windows GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version={{VERSION}}" -o dist/windows-amd64.exe ./cmd/vbuild
+      - VERSION={{VERSION}} ./scripts/release.sh
+
+  release-windows:
+    desc: build release binaries (windows)
+    run:
+      - $env:VERSION="{{VERSION}}"; .\\scripts\\release.ps1

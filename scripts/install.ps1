@@ -13,7 +13,15 @@ switch ($arch) {
   }
 }
 
-$asset = "windows-$archTag.exe"
+if ($version -eq "latest") {
+  $suffix = "lastest"
+} elseif ($version -match "-lastest$") {
+  $suffix = "lastest"
+} else {
+  $suffix = $version
+}
+
+$asset = "windows-$archTag-$suffix.exe"
 
 if ($version -eq "latest") {
   $url = "https://github.com/vietrix/vbuild/releases/latest/download/$asset"

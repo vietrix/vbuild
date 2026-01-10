@@ -17,6 +17,16 @@ jobs:
       - run: go test ./...
       - run: chmod +x scripts/release.sh
       - run: VERSION=${{ github.ref_name }} scripts/release.sh
+      - name: Prepare release name
+        id: release_name
+        run: |
+          TAG="${{ github.ref_name }}"
+          NAME="$TAG"
+          case "$TAG" in
+            *-lastest) NAME="${TAG%-lastest}" ;;
+          esac
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
       - uses: softprops/action-gh-release@v2
         with:
+          name: ${{ steps.release_name.outputs.name }}
           files: dist/*

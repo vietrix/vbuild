@@ -24,7 +24,15 @@ case "$ARCH" in
     ;;
 esac
 
-ASSET="$OS-$ARCH"
+if [ "$VERSION" = "latest" ]; then
+  SUFFIX="lastest"
+elif [ "${VERSION%-lastest}" != "$VERSION" ]; then
+  SUFFIX="lastest"
+else
+  SUFFIX="$VERSION"
+fi
+
+ASSET="$OS-$ARCH-$SUFFIX"
 
 if [ "$VERSION" = "latest" ]; then
   URL="https://github.com/vietrix/vbuild/releases/latest/download/$ASSET"

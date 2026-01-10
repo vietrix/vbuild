@@ -2,6 +2,12 @@
 set -eu
 
 VERSION="${VERSION:-dev}"
+SUFFIX="$VERSION"
+
+case "$VERSION" in
+  latest) SUFFIX="lastest" ;;
+  *-lastest) SUFFIX="lastest" ;;
+esac
 
 ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"
@@ -33,16 +39,16 @@ checksum() {
   exit 1
 }
 
-build linux amd64 linux-amd64
-build linux arm64 linux-arm64
-build darwin amd64 darwin-amd64
-build darwin arm64 darwin-arm64
-build windows amd64 windows-amd64.exe
+build linux amd64 "linux-amd64-$SUFFIX"
+build linux arm64 "linux-arm64-$SUFFIX"
+build darwin amd64 "darwin-amd64-$SUFFIX"
+build darwin arm64 "darwin-arm64-$SUFFIX"
+build windows amd64 "windows-amd64-$SUFFIX.exe"
 
-checksum linux-amd64
-checksum linux-arm64
-checksum darwin-amd64
-checksum darwin-arm64
-checksum windows-amd64.exe
+checksum "linux-amd64-$SUFFIX"
+checksum "linux-arm64-$SUFFIX"
+checksum "darwin-amd64-$SUFFIX"
+checksum "darwin-arm64-$SUFFIX"
+checksum "windows-amd64-$SUFFIX.exe"
 
 echo "release artifacts in $DIST_DIR"

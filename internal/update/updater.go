@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/vietrix/vbuild/internal/platform"
 	updateunix "github.com/vietrix/vbuild/internal/update/unix"
@@ -27,7 +28,8 @@ func Run(opts Options) error {
 		return err
 	}
 
-	assetName, err := platform.AssetName(runtime.GOOS, runtime.GOARCH)
+	suffix := assetSuffix(rel.TagName)
+	assetName, err := platform.AssetName(runtime.GOOS, runtime.GOARCH, suffix)
 	if err != nil {
 		return err
 	}
@@ -110,4 +112,15 @@ func Run(opts Options) error {
 	}
 	fmt.Fprintf(opts.Out, "update scheduled to %s (restart vbuild)\n", rel.TagName)
 	return nil
+}
+
+func assetSuffix(tag string) string {
+	tag = strings.TrimSpace(tag)
+	if tag == "" {
+		return "lastest"
+	}
+	if strings.HasSuffix(tag, "-lastest") {
+		return "lastest"
+	}
+	return tag
 }
