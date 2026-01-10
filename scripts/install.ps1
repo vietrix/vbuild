@@ -5,11 +5,26 @@ if ([string]::IsNullOrWhiteSpace($version)) {
   $version = "latest"
 }
 
-$arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
-switch ($arch) {
+$arch = $null
+try {
+  $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
+} catch {
+}
+
+$archString = "$arch"
+if ([string]::IsNullOrWhiteSpace($archString)) {
+  $archString = $env:PROCESSOR_ARCHITECTURE
+}
+if ($archString -eq "x86" -and -not [string]::IsNullOrWhiteSpace($env:PROCESSOR_ARCHITEW6432)) {
+  $archString = $env:PROCESSOR_ARCHITEW6432
+}
+$archString = $archString.ToUpperInvariant()
+
+switch ($archString) {
   "X64" { $archTag = "amd64" }
+  "AMD64" { $archTag = "amd64" }
   default {
-    Write-Error "unsupported architecture: $arch"
+    Write-Error "unsupported architecture: $archString"
   }
 }
 

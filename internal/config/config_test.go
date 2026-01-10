@@ -33,3 +33,15 @@ func TestValidateNoopTask(t *testing.T) {
 		t.Fatal("expected validation error")
 	}
 }
+
+func TestEnvOverridesVars(t *testing.T) {
+	t.Setenv("VBUILD_VAR_VERSION", "v9.9.9")
+	cfg := &Config{
+		Vars: map[string]string{"VERSION": "dev"},
+	}
+	cfg.normalize()
+	cfg.applyEnvOverrides()
+	if got := cfg.Vars["VERSION"]; got != "v9.9.9" {
+		t.Fatalf("expected env override v9.9.9, got %q", got)
+	}
+}

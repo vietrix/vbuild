@@ -53,6 +53,7 @@ func Load(path string) (*Config, error) {
 	}
 
 	cfg.normalize()
+	cfg.applyEnvOverrides()
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}
@@ -68,6 +69,24 @@ func (c *Config) normalize() {
 	}
 	if c.Vars == nil {
 		c.Vars = map[string]string{}
+	}
+}
+
+func (c *Config) applyEnvOverrides() {
+	const prefix = "VBUILD_VAR_"
+	for _, entry := range os.Environ() {
+		if !strings.HasPrefix(entry, prefix) {
+			continue
+		}
+		parts := strings.SplitN(entry, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := strings.TrimPrefix(parts[0], prefix)
+		if strings.TrimSpace(key) == "" {
+			continue
+		}
+		c.Vars[key] = parts[1]
 	}
 }
 

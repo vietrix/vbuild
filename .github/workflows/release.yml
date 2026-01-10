@@ -14,9 +14,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.22.x'
-      - run: go test ./...
+      - run: VBUILD_VAR_VERSION=${{ github.ref_name }} go run ./cmd/vbuild test
       - run: chmod +x scripts/release.sh
-      - run: VERSION=${{ github.ref_name }} scripts/release.sh
+      - run: VBUILD_VAR_VERSION=${{ github.ref_name }} go run ./cmd/vbuild release
       - name: Prepare release name
         id: release_name
         run: |

@@ -4,30 +4,30 @@ vbuild is a fast, minimal, cross-platform task runner that executes real shell c
 
 ## Install
 
-Installer scripts are hosted from the `scripts/` directory for GitHub Pages.
+Installer scripts are hosted from the `scripts/` directory on GitHub.
 
 ### Linux/macOS
 
 ```sh
-curl -fsSL https://vbuild.vietrix.dev/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/vietrix/vbuild/main/scripts/install.sh | sh
 ```
 
 Pin a version:
 
 ```sh
-VBUILD_VERSION=v1.2.3 curl -fsSL https://vbuild.vietrix.dev/scripts/install.sh | sh
+VBUILD_VERSION=v1.2.3 curl -fsSL https://raw.githubusercontent.com/vietrix/vbuild/main/scripts/install.sh | sh
 ```
 
 ### Windows (PowerShell)
 
 ```powershell
-iwr -useb https://vbuild.vietrix.dev/scripts/install.ps1 | iex
+iwr -useb https://raw.githubusercontent.com/vietrix/vbuild/main/scripts/install.ps1 | iex
 ```
 
 Pin a version:
 
 ```powershell
-$env:VBUILD_VERSION = "v1.2.3"; iwr -useb https://vbuild.vietrix.dev/scripts/install.ps1 | iex
+$env:VBUILD_VERSION = "v1.2.3"; iwr -useb https://raw.githubusercontent.com/vietrix/vbuild/main/scripts/install.ps1 | iex
 ```
 
 ## Usage
@@ -82,6 +82,7 @@ tasks:
 
 Notes:
 - `vars` can be referenced in commands as `{{VAR_NAME}}`.
+- `vars` can be overridden via environment variables named `VBUILD_VAR_<NAME>`.
 - `env` is merged: OS env -> global `env` -> task `env`.
 - Config is validated on load with clear, path-specific errors.
 - Dependencies are resolved with cycle detection.
@@ -116,7 +117,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.22.x'
-      - run: curl -fsSL https://vbuild.vietrix.dev/scripts/install.sh | sh
+      - run: curl -fsSL https://raw.githubusercontent.com/vietrix/vbuild/main/scripts/install.sh | sh
       - run: vbuild test
       - run: vbuild build
 ```
@@ -124,7 +125,7 @@ jobs:
 ### Generic CI
 
 ```sh
-curl -fsSL https://vbuild.vietrix.dev/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/vietrix/vbuild/main/scripts/install.sh | sh
 vbuild --file .vbuild.yml test
 ```
 
