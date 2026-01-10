@@ -45,13 +45,51 @@ trap 'rm -rf "$TMPDIR"' EXIT
 
 BIN_PATH="$TMPDIR/vbuild"
 
-if command -v curl >/dev/null 2>&1; then
-  curl -fsSL "$URL" -o "$BIN_PATH"
-elif command -v wget >/dev/null 2>&1; then
-  wget -qO "$BIN_PATH" "$URL"
-else
+download() {
+  url="$1"
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL "$url" -o "$BIN_PATH"
+    return $?
+  fi
+  if command -v wget >/dev/null 2>&1; then
+    wget -qO "$BIN_PATH" "$url"
+    return $?
+  fi
   echo "curl or wget is required" >&2
   exit 1
+}
+
+fetch_latest_tag() {
+  api="https://api.github.com/repos/vietrix/vbuild/releases/latest"
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL -H "User-Agent: vbuild-installer" "$api"
+    return $?
+  fi
+  if command -v wget >/dev/null 2>&1; then
+    wget -qO- --header="User-Agent: vbuild-installer" "$api"
+    return $?
+  fi
+  return 1
+}
+
+if ! download "$URL"; then
+  if [ "$VERSION" = "latest" ]; then
+    tag="$(fetch_latest_tag | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
+    if [ -n "$tag" ]; then
+      ASSET="$OS-$ARCH-$tag"
+      URL="https://github.com/vietrix/vbuild/releases/download/$tag/$ASSET"
+      download "$URL" || {
+        echo "failed to download $URL" >&2
+        exit 1
+      }
+    else
+      echo "failed to resolve latest release tag" >&2
+      exit 1
+    fi
+  else
+    echo "failed to download $URL" >&2
+    exit 1
+  fi
 fi
 
 chmod 755 "$BIN_PATH"

@@ -51,7 +51,49 @@ New-Item -ItemType Directory -Force -Path $installDir | Out-Null
 
 $dest = Join-Path $installDir "vbuild.exe"
 
+function Test-Url([string]$uri) {
+  try {
+    $params = @{
+      Method             = "Head"
+      Uri                = $uri
+      Headers            = @{ "User-Agent" = "vbuild-installer" }
+      MaximumRedirection = 10
+      TimeoutSec         = 20
+    }
+    if ($PSVersionTable.PSVersion.Major -lt 6) {
+      $params.UseBasicParsing = $true
+    }
+    $resp = Invoke-WebRequest @params
+    if ($resp.StatusCode -ge 200 -and $resp.StatusCode -lt 400) {
+      return $true
+    }
+    if ($resp.StatusCode -eq 404) {
+      return $false
+    }
+  } catch {
+    $response = $_.Exception.Response
+    if ($response -and $response.StatusCode -eq 404) {
+      return $false
+    }
+  }
+  return $true
+}
+
+function Get-LatestTag {
+  $headers = @{ "User-Agent" = "vbuild-installer" }
+  $params = @{
+    Uri        = "https://api.github.com/repos/vietrix/vbuild/releases/latest"
+    Headers    = $headers
+    TimeoutSec = 30
+  }
+  $resp = Invoke-RestMethod @params
+  return $resp.tag_name
+}
+
 function Download-File([string]$uri, [string]$outFile) {
+  if (-not (Test-Url $uri)) {
+    return $false
+  }
   $headers = @{ "User-Agent" = "vbuild-installer" }
   $maxAttempts = 3
   for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
@@ -67,7 +109,7 @@ function Download-File([string]$uri, [string]$outFile) {
         $params.UseBasicParsing = $true
       }
       Invoke-WebRequest @params
-      return
+      return $true
     } catch {
       if ($attempt -lt $maxAttempts) {
         Start-Sleep -Seconds (2 * $attempt)
@@ -80,20 +122,36 @@ function Download-File([string]$uri, [string]$outFile) {
   if ($curl) {
     & $curl.Source -fsSL $uri -o $outFile
     if ($LASTEXITCODE -eq 0) {
-      return
+      return $true
     }
   }
 
   $bits = Get-Command Start-BitsTransfer -ErrorAction SilentlyContinue
   if ($bits) {
     Start-BitsTransfer -Source $uri -Destination $outFile
-    return
+    return $true
   }
 
   throw "download failed from $uri"
 }
 
-Download-File $url $dest
+if ($version -eq "latest") {
+  if (-not (Download-File $url $dest)) {
+    $tag = Get-LatestTag
+    if ([string]::IsNullOrWhiteSpace($tag)) {
+      throw "failed to resolve latest release tag"
+    }
+    $asset = "windows-$archTag-$tag.exe"
+    $url = "https://github.com/vietrix/vbuild/releases/download/$tag/$asset"
+    if (-not (Download-File $url $dest)) {
+      throw "release asset not found: $url"
+    }
+  }
+} else {
+  if (-not (Download-File $url $dest)) {
+    throw "release asset not found: $url"
+  }
+}
 
 $path = [Environment]::GetEnvironmentVariable("Path", "User")
 if (-not ($path -split ";" | Where-Object { $_ -eq $installDir })) {
