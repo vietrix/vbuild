@@ -2,7 +2,7 @@ workflow: "vbuild public"
 
 vars:
   APP: vbuild
-  VERSION: dev
+  VERSION: v0.0.4
 
 env:
   CGO_ENABLED: "0"
