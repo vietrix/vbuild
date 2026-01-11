@@ -21,10 +21,14 @@ if ($archString -eq "x86" -and -not [string]::IsNullOrWhiteSpace($env:PROCESSOR_
   $archString = $env:PROCESSOR_ARCHITEW6432
 }
 $archString = $archString.ToUpperInvariant()
+$archString = $archString -replace '\s', ''
 
 switch ($archString) {
   "X64" { $archTag = "amd64" }
   "AMD64" { $archTag = "amd64" }
+  "X86_64" { $archTag = "amd64" }
+  "X86-64" { $archTag = "amd64" }
+  "ARM64" { Write-Error "unsupported architecture: ARM64 (no windows arm64 release)" }
   default {
     Write-Error "unsupported architecture: $archString"
   }

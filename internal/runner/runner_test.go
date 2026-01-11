@@ -19,8 +19,8 @@ func TestBuildPlanOrder(t *testing.T) {
 		},
 	}
 
-	r := New(cfg, true, io.Discard, io.Discard)
-	plan, err := r.buildPlan("default")
+	r := New(cfg, Options{DryRun: true}, io.Discard, io.Discard)
+	plan, err := r.buildPlan([]string{"default"})
 	if err != nil {
 		t.Fatalf("buildPlan error: %v", err)
 	}
@@ -39,8 +39,8 @@ func TestBuildPlanCycle(t *testing.T) {
 		},
 	}
 
-	r := New(cfg, true, io.Discard, io.Discard)
-	if _, err := r.buildPlan("a"); err == nil {
+	r := New(cfg, Options{DryRun: true}, io.Discard, io.Discard)
+	if _, err := r.buildPlan([]string{"a"}); err == nil {
 		t.Fatal("expected cycle error")
 	}
 }

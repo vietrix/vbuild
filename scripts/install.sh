@@ -92,6 +92,22 @@ fi
 install -m 755 "$BIN_PATH" "$DEST/vbuild"
 
 echo "vbuild installed to $DEST/vbuild"
+
+if [ -n "${BASH_VERSION:-}" ]; then RC="$HOME/.bashrc"
+elif [ -n "${ZSH_VERSION:-}" ]; then RC="$HOME/.zshrc"
+else RC="$HOME/.profile"
+fi
+
+case ":$PATH:" in
+  *":$DEST:"*) : ;;
+  *)
+    echo "" >> "$RC"
+    echo "# Added by vbuild installer" >> "$RC"
+    echo "export PATH=\"$DEST:\$PATH\"" >> "$RC"
+    echo "PATH updated in $RC (open new shell or run 'source $RC')" >&2
+    ;;
+esac
+
 if ! command -v vbuild >/dev/null 2>&1; then
-  echo "make sure $DEST is in your PATH" >&2
+  echo "reload shell to use 'vbuild'" >&2
 fi

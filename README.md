@@ -35,13 +35,42 @@ $env:VBUILD_VERSION = "v1.2.3"; iwr -useb https://raw.githubusercontent.com/viet
 ```sh
 vbuild                  # run default task
 vbuild build            # run build task + deps
+vbuild help             # show help
 vbuild list             # list tasks
 vbuild --file other.yml # use alternate config
 vbuild --dry-run        # print commands only
+vbuild --dry-run=json   # emit JSON plan
 vbuild --version        # print version
+vbuild -V               # short version flag
 vbuild update           # update to latest release
 vbuild update --to v1.2.3
+vbuild list --json      # list tasks as JSON
+vbuild graph --format dot
+vbuild watch <task>     # re-run on file changes
+vbuild tag <tag>        # run tasks by tag
+vbuild only-changed     # run tasks affected by git diff
+vbuild inspect <task>   # resolved task details
+vbuild shell <task>     # open shell with task env/workdir
+vbuild doctor           # check tooling
+vbuild clean            # remove .vbuild cache/artifacts
+vbuild daemon start     # start daemon mode
+vbuild init             # scaffold .vbuild.yml
+vbuild lock             # write .vbuild.lock
 ```
+
+Common flags:
+- `--max-parallel` limit concurrent tasks
+- `--continue-on-error` keep running independent tasks
+- `--profile` print critical path
+- `--explain` show skip reasons
+- `--json` structured logs
+- `--log-level` debug|info|warn|error
+- `--timestamp` include timestamps in logs
+- `--color` auto|always|never
+- `--env-file` override .env path
+- `--timeout` default task timeout
+- `--timeline` write timeline JSON
+- `--yes` auto-confirm prompts
 
 ## Configuration
 
@@ -89,6 +118,34 @@ Notes:
 - Tasks run as a DAG: independent tasks execute concurrently.
 - `parallel: true` runs commands in a task concurrently with prefixed logs.
 - A summary with per-task timing is printed after execution.
+
+Additional config features:
+- `templates` + `use`/`with` for reusable task blocks.
+- `include` to merge additional YAML configs (local file or URL).
+- `env_file` or `.env` for environment loading.
+- `when` for conditional execution (`env.*`, `vars.*`, `os`, `arch`).
+- `inputs` + `outputs` + `cache` (`mtime` or `sha256`) for incremental builds.
+- `output_paths` to propagate produced outputs as downstream inputs.
+- `matrix` for strategy expansion (creates task variants).
+- `fanout` to split task commands into parallel DAG nodes.
+- `workdir`, `shell`, `timeout`, `retries`, `backoff`, `continue_on_error`.
+- per-command timeouts via `timeout=1m: <command>`.
+- `depends_on` for conditional dependencies.
+- `retry_on_exit_codes` and `retry_on_regex` for targeted retries.
+- `allow_failure` to mark tasks as non-fatal.
+- `exports` to export environment variables to downstream tasks.
+- `limits` for CPU/memory caps (Unix shells).
+- `remote` for SSH task execution.
+- `isolate` to run tasks in a sandboxed workspace.
+- `pre`/`post` hooks and `confirm` prompts.
+- `watch` patterns for `vbuild watch`.
+- `tags` for `vbuild tag <name>`.
+- `artifacts` collection into `.vbuild/artifacts` (or `artifacts_dir`).
+- `docker` helpers for build/push/pull tasks.
+- `secrets` to mask log output (values pulled from env).
+- `plugins` for task lifecycle hooks.
+- `log_plugins` to receive JSON log events on stdin.
+- `cache_remote` to store build cache in S3/GCS/MinIO.
 
 ## Self-update
 
@@ -194,6 +251,32 @@ tasks:
       - docker build -t myapp:latest .
 ```
 
+### Templates + Matrix
+
+```yaml
+templates:
+  go-build:
+    run:
+      - go build -o {{OUT}} {{PKG}}
+
+tasks:
+  build:
+    use: go-build
+    with:
+      OUT: bin/app
+      PKG: ./cmd/app
+
+  test:
+    matrix:
+      GOOS: [linux, darwin]
+      GOARCH: [amd64, arm64]
+    env:
+      GOOS: "{{GOOS}}"
+      GOARCH: "{{GOARCH}}"
+    run:
+      - go test ./...
+```
+
 ## Testing
 
 Automated:
@@ -213,6 +296,42 @@ vbuild build
 Reproducibility:
 - `go.mod` pins the Go toolchain version.
 - Release builds use `-trimpath`, `-buildvcs=false`, and `CGO_ENABLED=0` for deterministic output.
+
+## Lock file
+
+Use `vbuild lock` to write `.vbuild.lock` with the current vbuild version. By default, vbuild will warn if the lock version differs from the running binary. Use `--strict-lock` to fail on mismatch or `--ignore-lock` to skip the check.
+
+## Structured logging
+
+Use `--json` for JSON logs and `--log-level` to control verbosity. When `parallel: true`, command output is prefixed (or tagged in JSON).
+
+## Watch mode
+
+`vbuild watch <task>` polls for file changes (using `watch` patterns or `inputs`) and re-runs the task. Use `--interval` and `--debounce` to tune polling.
+
+## Only-changed mode
+
+Use `vbuild only-changed` or the `--only-changed` flag to run tasks whose `inputs`/`watch` patterns match `git diff` results. Example:
+
+```sh
+vbuild only-changed --base origin/main
+vbuild --only-changed --changed-base origin/main test
+```
+
+## Daemon mode
+
+Daemon mode keeps a background process ready to execute tasks.
+
+```sh
+vbuild daemon start
+vbuild daemon status
+vbuild daemon run build
+vbuild daemon stop
+```
+
+## Timeline traces
+
+Use `--timeline path.json` to record task/command timings as JSON events.
 
 ## License
 

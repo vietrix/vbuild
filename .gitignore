@@ -2,6 +2,11 @@
 /dist/
 /vbuild
 /vbuild.exe
+/.vbuild/cache/
+/.vbuild/artifacts/
+/.vbuild/sandbox/
+/.vbuild/daemon.json
+/.vbuild/daemon.log
 
 *.exe
 *.test
