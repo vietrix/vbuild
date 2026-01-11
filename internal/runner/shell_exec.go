@@ -29,6 +29,9 @@ func (r *Runner) OpenShell(taskName string) error {
 	envMap := r.taskEnv(vars, task)
 	env := envMapToList(envMap)
 	workdir := expandVars(task.Workdir, vars)
+	if workdir == "" && r.cfg != nil && r.cfg.Defaults != nil {
+		workdir = expandVars(r.cfg.Defaults.Workdir, vars)
+	}
 	if workdir == "" {
 		workdir = r.configRoot
 	}
@@ -36,7 +39,11 @@ func (r *Runner) OpenShell(taskName string) error {
 		workdir = r.resolvePath(workdir)
 	}
 
-	shell, args := interactiveShell(task.Shell)
+	shellValue := task.Shell
+	if shellValue == "" && r.cfg != nil && r.cfg.Defaults != nil {
+		shellValue = r.cfg.Defaults.Shell
+	}
+	shell, args := interactiveShell(shellValue)
 	cmd := exec.Command(shell, args...)
 	cmd.Env = env
 	cmd.Dir = workdir

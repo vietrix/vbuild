@@ -9,12 +9,16 @@ import (
 
 type Config struct {
 	Path         string            `yaml:"-"`
+	Hash         string            `yaml:"-"`
 	Workflow     string            `yaml:"workflow"`
 	Include      []string          `yaml:"include"`
 	EnvFile      string            `yaml:"env_file"`
 	ArtifactsDir string            `yaml:"artifacts_dir"`
 	Timeout      string            `yaml:"timeout"`
+	Defaults     *Defaults         `yaml:"defaults"`
+	FailFast     bool              `yaml:"fail_fast"`
 	CacheRemote  *CacheRemote      `yaml:"cache_remote"`
+	Artifacts    *ArtifactsUpload  `yaml:"artifacts_upload"`
 	LogPlugins   []Plugin          `yaml:"log_plugins"`
 	Secrets      []string          `yaml:"secrets"`
 	Vars         map[string]string `yaml:"vars"`
@@ -22,10 +26,23 @@ type Config struct {
 	Templates    map[string]*Task  `yaml:"templates"`
 	Tasks        map[string]*Task  `yaml:"tasks"`
 	Plugins      []Plugin          `yaml:"plugins"`
+	Aliases      map[string]string `yaml:"-"`
+	Sources      []string          `yaml:"-"`
+}
+
+type Defaults struct {
+	Timeout    string `yaml:"timeout"`
+	Shell      string `yaml:"shell"`
+	Workdir    string `yaml:"workdir"`
+	Retries    int    `yaml:"retries"`
+	MaxRetries int    `yaml:"max_retries"`
+	Backoff    string `yaml:"backoff"`
+	Jitter     string `yaml:"jitter"`
 }
 
 type Task struct {
 	Desc             string              `yaml:"desc"`
+	Aliases          []string            `yaml:"aliases"`
 	Deps             []string            `yaml:"deps"`
 	Needs            []string            `yaml:"needs"`
 	DependsOn        []ConditionalDep    `yaml:"depends_on"`
@@ -39,22 +56,31 @@ type Task struct {
 	Workdir          string              `yaml:"workdir"`
 	Shell            string              `yaml:"shell"`
 	When             string              `yaml:"when"`
+	OnlyOn           *OnlyOn             `yaml:"only_on"`
 	Tags             []string            `yaml:"tags"`
 	Secrets          []string            `yaml:"secrets"`
 	Inputs           []string            `yaml:"inputs"`
 	Outputs          []string            `yaml:"outputs"`
 	OutputPaths      []string            `yaml:"output_paths"`
+	Output           map[string]string   `yaml:"output"`
+	Capture          *OutputCapture      `yaml:"capture"`
 	Exports          map[string]string   `yaml:"exports"`
 	Cache            string              `yaml:"cache"`
 	Retries          int                 `yaml:"retries"`
+	MaxRetries       int                 `yaml:"max_retries"`
 	RetryOnExitCodes []int               `yaml:"retry_on_exit_codes"`
 	RetryOnRegex     []string            `yaml:"retry_on_regex"`
+	RetryOnSignal    []string            `yaml:"retry_on_signal"`
 	Backoff          string              `yaml:"backoff"`
+	Jitter           string              `yaml:"jitter"`
 	Timeout          string              `yaml:"timeout"`
 	ContinueOnError  bool                `yaml:"continue_on_error"`
 	AllowFailure     bool                `yaml:"allow_failure"`
 	Confirm          string              `yaml:"confirm"`
 	Isolate          bool                `yaml:"isolate"`
+	Silent           bool                `yaml:"silent"`
+	IfMissing        bool                `yaml:"if_missing"`
+	Require          []string            `yaml:"require"`
 	Limits           *ResourceLimits     `yaml:"limits"`
 	Remote           *RemoteSpec         `yaml:"remote"`
 	Use              string              `yaml:"use"`
@@ -68,6 +94,18 @@ type Task struct {
 type ConditionalDep struct {
 	Task string `yaml:"task"`
 	When string `yaml:"when"`
+}
+
+type OnlyOn struct {
+	Branches []string `yaml:"branches"`
+	Tags     []string `yaml:"tags"`
+}
+
+type OutputCapture struct {
+	Stdout   string `yaml:"stdout"`
+	Stderr   string `yaml:"stderr"`
+	Combined string `yaml:"combined"`
+	Append   bool   `yaml:"append"`
 }
 
 type ResourceLimits struct {
@@ -85,6 +123,21 @@ type RemoteSpec struct {
 
 type CacheRemote struct {
 	Provider     string `yaml:"provider"`
+	Bucket       string `yaml:"bucket"`
+	Prefix       string `yaml:"prefix"`
+	Region       string `yaml:"region"`
+	Endpoint     string `yaml:"endpoint"`
+	AccessKey    string `yaml:"access_key"`
+	SecretKey    string `yaml:"secret_key"`
+	SessionToken string `yaml:"session_token"`
+	PathStyle    bool   `yaml:"path_style"`
+}
+
+type ArtifactsUpload struct {
+	Provider     string `yaml:"provider"`
+	Repo         string `yaml:"repo"`
+	Tag          string `yaml:"tag"`
+	Token        string `yaml:"token"`
 	Bucket       string `yaml:"bucket"`
 	Prefix       string `yaml:"prefix"`
 	Region       string `yaml:"region"`
@@ -156,8 +209,17 @@ func (c *Config) normalize() {
 	if c.LogPlugins == nil {
 		c.LogPlugins = []Plugin{}
 	}
+	if c.Defaults != nil {
+		if c.Defaults.Retries < 0 {
+			c.Defaults.Retries = 0
+		}
+		if c.Defaults.MaxRetries < 0 {
+			c.Defaults.MaxRetries = 0
+		}
+	}
 	c.Secrets = dedupeStrings(c.Secrets)
 	c.normalizeTasks()
+	c.buildAliases()
 }
 
 func (c *Config) normalizeTasks() {
@@ -170,6 +232,9 @@ func (c *Config) normalizeTasks() {
 		}
 		if task.Vars == nil {
 			task.Vars = map[string]string{}
+		}
+		if task.Output == nil {
+			task.Output = map[string]string{}
 		}
 		if task.Exports == nil {
 			task.Exports = map[string]string{}
@@ -186,6 +251,11 @@ func (c *Config) normalizeTasks() {
 		if len(task.OutputPaths) == 0 && len(task.Outputs) > 0 {
 			task.OutputPaths = append(task.OutputPaths, task.Outputs...)
 		}
+		if task.OnlyOn != nil {
+			task.OnlyOn.Branches = dedupeStrings(task.OnlyOn.Branches)
+			task.OnlyOn.Tags = dedupeStrings(task.OnlyOn.Tags)
+		}
+		task.Aliases = dedupeStrings(task.Aliases)
 		task.Deps = dedupeStrings(task.Deps)
 		task.Tags = dedupeStrings(task.Tags)
 		task.Secrets = dedupeStrings(task.Secrets)
@@ -193,6 +263,8 @@ func (c *Config) normalizeTasks() {
 		task.Outputs = dedupeStrings(task.Outputs)
 		task.OutputPaths = dedupeStrings(task.OutputPaths)
 		task.RetryOnRegex = dedupeStrings(task.RetryOnRegex)
+		task.RetryOnSignal = dedupeStrings(task.RetryOnSignal)
+		task.Require = dedupeStrings(task.Require)
 	}
 }
 
@@ -201,6 +273,38 @@ func (c *Config) validate() error {
 
 	validateKeyMap("vars", c.Vars, &issues)
 	validateKeyMap("env", c.Env, &issues)
+	if c.Defaults != nil {
+		if strings.TrimSpace(c.Defaults.Workdir) == "" && c.Defaults.Workdir != "" {
+			issues = append(issues, "defaults.workdir must not be empty")
+		}
+		if strings.TrimSpace(c.Defaults.Shell) == "" && c.Defaults.Shell != "" {
+			issues = append(issues, "defaults.shell must not be empty")
+		}
+		if c.Defaults.Timeout != "" {
+			if _, err := time.ParseDuration(c.Defaults.Timeout); err != nil {
+				issues = append(issues, fmt.Sprintf("defaults.timeout invalid duration: %s", err))
+			}
+		}
+		if c.Defaults.Backoff != "" {
+			if _, err := time.ParseDuration(c.Defaults.Backoff); err != nil {
+				issues = append(issues, fmt.Sprintf("defaults.backoff invalid duration: %s", err))
+			}
+		}
+		if c.Defaults.Jitter != "" {
+			if _, err := time.ParseDuration(c.Defaults.Jitter); err != nil {
+				issues = append(issues, fmt.Sprintf("defaults.jitter invalid duration: %s", err))
+			}
+		}
+		if c.Defaults.Retries < 0 {
+			issues = append(issues, "defaults.retries must be >= 0")
+		}
+		if c.Defaults.MaxRetries < 0 {
+			issues = append(issues, "defaults.max_retries must be >= 0")
+		}
+		if c.Defaults.MaxRetries > 0 && c.Defaults.Retries > c.Defaults.MaxRetries {
+			issues = append(issues, "defaults.retries must be <= defaults.max_retries")
+		}
+	}
 	if c.ArtifactsDir != "" && strings.TrimSpace(c.ArtifactsDir) == "" {
 		issues = append(issues, "artifacts_dir must not be empty")
 	}
@@ -244,6 +348,24 @@ func (c *Config) validate() error {
 			issues = append(issues, "cache_remote.bucket must not be empty")
 		}
 	}
+	if c.Artifacts != nil {
+		provider := strings.ToLower(strings.TrimSpace(c.Artifacts.Provider))
+		if provider == "" {
+			issues = append(issues, "artifacts_upload.provider must not be empty")
+		} else if provider != "github" && provider != "s3" {
+			issues = append(issues, fmt.Sprintf("artifacts_upload.provider must be github or s3 (got %q)", c.Artifacts.Provider))
+		}
+		switch provider {
+		case "github":
+			if strings.TrimSpace(c.Artifacts.Repo) == "" {
+				issues = append(issues, "artifacts_upload.repo must not be empty")
+			}
+		case "s3":
+			if strings.TrimSpace(c.Artifacts.Bucket) == "" {
+				issues = append(issues, "artifacts_upload.bucket must not be empty")
+			}
+		}
+	}
 
 	for name, tmpl := range c.Templates {
 		if strings.TrimSpace(name) == "" {
@@ -260,6 +382,8 @@ func (c *Config) validate() error {
 	if len(c.Tasks) == 0 {
 		issues = append(issues, "tasks must not be empty")
 	}
+
+	aliases := map[string]string{}
 
 	taskNames := make([]string, 0, len(c.Tasks))
 	for name := range c.Tasks {
@@ -284,6 +408,23 @@ func (c *Config) validate() error {
 		}
 
 		validateTask(fmt.Sprintf("tasks.%s", name), task, c, &issues, true)
+
+		for i, alias := range task.Aliases {
+			alias = strings.TrimSpace(alias)
+			if alias == "" {
+				issues = append(issues, fmt.Sprintf("tasks.%s.aliases[%d] must not be empty", name, i))
+				continue
+			}
+			if _, ok := c.Tasks[alias]; ok {
+				issues = append(issues, fmt.Sprintf("tasks.%s.aliases[%d] conflicts with task name %q", name, i, alias))
+				continue
+			}
+			if existing, ok := aliases[alias]; ok && existing != name {
+				issues = append(issues, fmt.Sprintf("tasks.%s.aliases[%d] duplicates alias for %q", name, i, existing))
+				continue
+			}
+			aliases[alias] = name
+		}
 	}
 
 	if len(issues) > 0 {
@@ -310,6 +451,11 @@ func validateKeyMap(path string, values map[string]string, issues *[]string) {
 }
 
 func validateTask(path string, task *Task, cfg *Config, issues *[]string, checkDeps bool) {
+	for i, alias := range task.Aliases {
+		if strings.TrimSpace(alias) == "" {
+			*issues = append(*issues, fmt.Sprintf("%s.aliases[%d] must not be empty", path, i))
+		}
+	}
 	for i, dep := range task.Deps {
 		depName := strings.TrimSpace(dep)
 		if depName == "" {
@@ -363,6 +509,20 @@ func validateTask(path string, task *Task, cfg *Config, issues *[]string, checkD
 			*issues = append(*issues, fmt.Sprintf("%s.output_paths[%d] must not be empty", path, i))
 		}
 	}
+	for key, value := range task.Output {
+		if strings.TrimSpace(key) == "" {
+			*issues = append(*issues, fmt.Sprintf("%s.output key must not be empty", path))
+			continue
+		}
+		if strings.TrimSpace(value) == "" {
+			*issues = append(*issues, fmt.Sprintf("%s.output.%s must not be empty", path, key))
+		}
+	}
+	if task.Capture != nil {
+		if strings.TrimSpace(task.Capture.Stdout) == "" && strings.TrimSpace(task.Capture.Stderr) == "" && strings.TrimSpace(task.Capture.Combined) == "" {
+			*issues = append(*issues, fmt.Sprintf("%s.capture must set stdout, stderr, or combined", path))
+		}
+	}
 	for key, value := range task.Exports {
 		if strings.TrimSpace(key) == "" {
 			*issues = append(*issues, fmt.Sprintf("%s.exports key must not be empty", path))
@@ -374,6 +534,18 @@ func validateTask(path string, task *Task, cfg *Config, issues *[]string, checkD
 	for i, watch := range task.Watch {
 		if strings.TrimSpace(watch) == "" {
 			*issues = append(*issues, fmt.Sprintf("%s.watch[%d] must not be empty", path, i))
+		}
+	}
+	if task.OnlyOn != nil {
+		for i, pattern := range task.OnlyOn.Branches {
+			if strings.TrimSpace(pattern) == "" {
+				*issues = append(*issues, fmt.Sprintf("%s.only_on.branches[%d] must not be empty", path, i))
+			}
+		}
+		for i, pattern := range task.OnlyOn.Tags {
+			if strings.TrimSpace(pattern) == "" {
+				*issues = append(*issues, fmt.Sprintf("%s.only_on.tags[%d] must not be empty", path, i))
+			}
 		}
 	}
 	if task.Use != "" {
@@ -395,9 +567,20 @@ func validateTask(path string, task *Task, cfg *Config, issues *[]string, checkD
 	if task.Retries < 0 {
 		*issues = append(*issues, fmt.Sprintf("%s.retries must be >= 0", path))
 	}
+	if task.MaxRetries < 0 {
+		*issues = append(*issues, fmt.Sprintf("%s.max_retries must be >= 0", path))
+	}
+	if task.MaxRetries > 0 && task.Retries > task.MaxRetries {
+		*issues = append(*issues, fmt.Sprintf("%s.retries must be <= %s.max_retries", path, path))
+	}
 	if task.Backoff != "" {
 		if _, err := time.ParseDuration(task.Backoff); err != nil {
 			*issues = append(*issues, fmt.Sprintf("%s.backoff invalid duration: %s", path, err))
+		}
+	}
+	if task.Jitter != "" {
+		if _, err := time.ParseDuration(task.Jitter); err != nil {
+			*issues = append(*issues, fmt.Sprintf("%s.jitter invalid duration: %s", path, err))
 		}
 	}
 	if task.Timeout != "" {
@@ -428,6 +611,11 @@ func validateTask(path string, task *Task, cfg *Config, issues *[]string, checkD
 			*issues = append(*issues, fmt.Sprintf("%s.retry_on_regex[%d] must not be empty", path, i))
 		}
 	}
+	for i, pattern := range task.RetryOnSignal {
+		if strings.TrimSpace(pattern) == "" {
+			*issues = append(*issues, fmt.Sprintf("%s.retry_on_signal[%d] must not be empty", path, i))
+		}
+	}
 	validateKeyMap(fmt.Sprintf("%s.env", path), task.Env, issues)
 	validateKeyMap(fmt.Sprintf("%s.vars", path), task.Vars, issues)
 
@@ -451,6 +639,16 @@ func validateTask(path string, task *Task, cfg *Config, issues *[]string, checkD
 			*issues = append(*issues, fmt.Sprintf("%s.remote.host must not be empty", path))
 		}
 	}
+	if task.IfMissing {
+		if len(task.Outputs) == 0 && len(task.OutputPaths) == 0 {
+			*issues = append(*issues, fmt.Sprintf("%s.if_missing requires outputs or output_paths", path))
+		}
+	}
+	for i, req := range task.Require {
+		if strings.TrimSpace(req) == "" {
+			*issues = append(*issues, fmt.Sprintf("%s.require[%d] must not be empty", path, i))
+		}
+	}
 }
 
 func dedupeStrings(values []string) []string {
@@ -469,4 +667,20 @@ func dedupeStrings(values []string) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+func (c *Config) buildAliases() {
+	c.Aliases = map[string]string{}
+	for name, task := range c.Tasks {
+		if task == nil {
+			continue
+		}
+		for _, alias := range task.Aliases {
+			alias = strings.TrimSpace(alias)
+			if alias == "" {
+				continue
+			}
+			c.Aliases[alias] = name
+		}
+	}
 }

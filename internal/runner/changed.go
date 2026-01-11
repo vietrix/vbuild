@@ -3,10 +3,12 @@ package runner
 import (
 	"bytes"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/bmatcuk/doublestar/v4"
 )
@@ -175,4 +177,56 @@ func parseGitList(output []byte) []string {
 		}
 	}
 	return out
+}
+
+func (r *Runner) ChangedSince(targets []string, since time.Time) ([]string, error) {
+	plan, err := r.buildPlan(r.allTaskNames())
+	if err != nil {
+		return nil, err
+	}
+	selected := []string{}
+	targetSet := map[string]struct{}{}
+	for _, t := range targets {
+		targetSet[t] = struct{}{}
+	}
+	for name, task := range plan.tasks {
+		if len(targetSet) > 0 {
+			if _, ok := targetSet[name]; !ok {
+				continue
+			}
+		}
+		vars := r.taskVars(plan, name, task)
+		patterns := append([]string{}, task.Inputs...)
+		patterns = append(patterns, task.Watch...)
+		if len(patterns) == 0 {
+			continue
+		}
+		changed, err := r.patternsSince(patterns, vars, since)
+		if err != nil {
+			return nil, err
+		}
+		if changed {
+			selected = append(selected, name)
+		}
+	}
+	out := dedupeNonEmpty(selected)
+	sort.Strings(out)
+	return out, nil
+}
+
+func (r *Runner) patternsSince(patterns []string, vars map[string]string, since time.Time) (bool, error) {
+	files, err := r.resolvePatterns(patterns, vars)
+	if err != nil {
+		return false, err
+	}
+	for _, file := range files {
+		info, err := os.Stat(file)
+		if err != nil {
+			continue
+		}
+		if info.ModTime().After(since) {
+			return true, nil
+		}
+	}
+	return false, nil
 }

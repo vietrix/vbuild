@@ -7,8 +7,12 @@ type Options struct {
 	DryRunFormat    string
 	MaxParallel     int
 	ContinueOnError bool
+	FailFast        bool
+	Reverse         bool
+	Until           string
 	Explain         bool
 	Profile         bool
+	Progress        bool
 	JSON            bool
 	LogLevel        string
 	Timestamp       bool
@@ -18,4 +22,5 @@ type Options struct {
 	ArtifactsDir    string
 	Timeout         time.Duration
 	TimelinePath    string
+	SummaryPath     string
 }

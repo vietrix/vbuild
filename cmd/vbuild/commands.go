@@ -52,6 +52,14 @@ func runGraph(args []string, cfg *config.Config, opts runner.Options, stdout, st
 	if !*all && len(targets) == 0 {
 		targets = []string{"default"}
 	}
+	if !*all {
+		resolved, err := resolveTargets(cfg, targets)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		targets = resolved
+	}
 	r := runner.New(cfg, opts, stdout, stderr)
 	if err := r.Graph(targets, *format, stdout); err != nil {
 		fmt.Fprintln(stderr, err)
@@ -65,6 +73,8 @@ func runWatch(args []string, cfg *config.Config, opts runner.Options, stdout, st
 	watchFlags.SetOutput(stderr)
 	interval := watchFlags.Duration("interval", time.Second, "polling interval")
 	debounce := watchFlags.Duration("debounce", 300*time.Millisecond, "debounce window")
+	events := watchFlags.Bool("events", true, "use filesystem events when available")
+	poll := watchFlags.Bool("poll", false, "force polling mode")
 	if err := watchFlags.Parse(args); err != nil {
 		return 2
 	}
@@ -72,8 +82,14 @@ func runWatch(args []string, cfg *config.Config, opts runner.Options, stdout, st
 	if args := watchFlags.Args(); len(args) > 0 {
 		taskName = args[0]
 	}
+	resolved, err := resolveSingleTarget(cfg, taskName)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
 	r := runner.New(cfg, opts, stdout, stderr)
-	if err := r.Watch(taskName, *interval, *debounce); err != nil {
+	useEvents := *events && !*poll
+	if err := r.Watch(resolved, runner.WatchOptions{Interval: *interval, Debounce: *debounce, UseEvents: useEvents}); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
@@ -184,8 +200,13 @@ func runShell(args []string, cfg *config.Config, opts runner.Options, stdout, st
 	if args := shellFlags.Args(); len(args) > 0 {
 		taskName = args[0]
 	}
+	resolved, err := resolveSingleTarget(cfg, taskName)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
 	r := runner.New(cfg, opts, stdout, stderr)
-	if err := r.OpenShell(taskName); err != nil {
+	if err := r.OpenShell(resolved); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
@@ -202,8 +223,13 @@ func runInspect(args []string, cfg *config.Config, opts runner.Options, stdout, 
 	if args := inspectFlags.Args(); len(args) > 0 {
 		taskName = args[0]
 	}
+	resolved, err := resolveSingleTarget(cfg, taskName)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
 	r := runner.New(cfg, opts, stdout, stderr)
-	if err := r.Inspect(taskName, stdout); err != nil {
+	if err := r.Inspect(resolved, stdout); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
@@ -222,9 +248,14 @@ func runOnlyChanged(args []string, cfg *config.Config, opts runner.Options, stdo
 		return 2
 	}
 	targets := changedFlags.Args()
+	resolvedTargets, err := resolveTargets(cfg, targets)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
 
 	r := runner.New(cfg, opts, stdout, stderr)
-	selected, err := r.ChangedTargets(targets, runner.ChangedOptions{
+	selected, err := r.ChangedTargets(resolvedTargets, runner.ChangedOptions{
 		BaseRef:          *base,
 		TargetRef:        *target,
 		IncludeUntracked: *includeUntracked,

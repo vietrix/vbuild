@@ -7,10 +7,11 @@ import (
 )
 
 type listTask struct {
-	Name string   `json:"name"`
-	Desc string   `json:"desc,omitempty"`
-	Deps []string `json:"deps,omitempty"`
-	Tags []string `json:"tags,omitempty"`
+	Name    string   `json:"name"`
+	Desc    string   `json:"desc,omitempty"`
+	Deps    []string `json:"deps,omitempty"`
+	Tags    []string `json:"tags,omitempty"`
+	Aliases []string `json:"aliases,omitempty"`
 }
 
 func (r *Runner) ListTasksJSON(out io.Writer) error {
@@ -30,6 +31,7 @@ func (r *Runner) ListTasksJSON(out io.Writer) error {
 			item.Desc = task.Desc
 			item.Deps = append([]string(nil), task.Deps...)
 			item.Tags = append([]string(nil), task.Tags...)
+			item.Aliases = append([]string(nil), task.Aliases...)
 		}
 		items = append(items, item)
 	}

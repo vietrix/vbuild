@@ -85,8 +85,8 @@ func compileRetryRegex(patterns []string) ([]*regexp.Regexp, error) {
 	return out, nil
 }
 
-func shouldRetryCommand(err error, output string, codes []int, regexes []*regexp.Regexp) bool {
-	if len(codes) == 0 && len(regexes) == 0 {
+func shouldRetryCommand(err error, output string, codes []int, regexes []*regexp.Regexp, signals []string) bool {
+	if len(codes) == 0 && len(regexes) == 0 && len(signals) == 0 {
 		return true
 	}
 	exitCode := -1
@@ -102,6 +102,16 @@ func shouldRetryCommand(err error, output string, codes []int, regexes []*regexp
 	for _, re := range regexes {
 		if re.MatchString(output) {
 			return true
+		}
+	}
+	if len(signals) > 0 {
+		signal := extractSignal(err)
+		if signal != "" {
+			for _, candidate := range signals {
+				if normalizeSignal(candidate) == signal {
+					return true
+				}
+			}
 		}
 	}
 	return false

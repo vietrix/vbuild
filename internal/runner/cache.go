@@ -157,26 +157,62 @@ func (r *Runner) cacheSignature(task *config.Task, vars map[string]string) strin
 	if task.Docker != nil {
 		commands = append(commands, dockerCommands(task.Docker, vars)...)
 	}
+	workdir := task.Workdir
+	shell := task.Shell
+	timeout := task.Timeout
+	backoff := task.Backoff
+	jitter := task.Jitter
+	retries := task.Retries
+	maxRetries := task.MaxRetries
+	if r.cfg != nil && r.cfg.Defaults != nil {
+		if workdir == "" {
+			workdir = r.cfg.Defaults.Workdir
+		}
+		if shell == "" {
+			shell = r.cfg.Defaults.Shell
+		}
+		if timeout == "" {
+			timeout = r.cfg.Defaults.Timeout
+		}
+		if backoff == "" {
+			backoff = r.cfg.Defaults.Backoff
+		}
+		if jitter == "" {
+			jitter = r.cfg.Defaults.Jitter
+		}
+		if retries == 0 {
+			retries = r.cfg.Defaults.Retries
+		}
+		if maxRetries == 0 {
+			maxRetries = r.cfg.Defaults.MaxRetries
+		}
+	}
 	payload := struct {
-		Run      []string          `json:"run"`
-		Env      map[string]string `json:"env"`
-		Vars     map[string]string `json:"vars"`
-		Workdir  string            `json:"workdir"`
-		Shell    string            `json:"shell"`
-		Timeout  string            `json:"timeout"`
-		Backoff  string            `json:"backoff"`
-		Retries  int               `json:"retries"`
-		Parallel bool              `json:"parallel"`
+		Run        []string          `json:"run"`
+		Env        map[string]string `json:"env"`
+		Vars       map[string]string `json:"vars"`
+		Workdir    string            `json:"workdir"`
+		Shell      string            `json:"shell"`
+		Timeout    string            `json:"timeout"`
+		Backoff    string            `json:"backoff"`
+		Jitter     string            `json:"jitter"`
+		Retries    int               `json:"retries"`
+		MaxRetries int               `json:"max_retries"`
+		Parallel   bool              `json:"parallel"`
+		Signals    []string          `json:"retry_on_signal,omitempty"`
 	}{
-		Run:      commands,
-		Env:      task.Env,
-		Vars:     vars,
-		Workdir:  task.Workdir,
-		Shell:    task.Shell,
-		Timeout:  task.Timeout,
-		Backoff:  task.Backoff,
-		Retries:  task.Retries,
-		Parallel: task.Parallel,
+		Run:        commands,
+		Env:        task.Env,
+		Vars:       vars,
+		Workdir:    workdir,
+		Shell:      shell,
+		Timeout:    timeout,
+		Backoff:    backoff,
+		Jitter:     jitter,
+		Retries:    retries,
+		MaxRetries: maxRetries,
+		Parallel:   task.Parallel,
+		Signals:    task.RetryOnSignal,
 	}
 	data, _ := json.Marshal(payload)
 	hash := sha256.Sum256(data)

@@ -11,43 +11,45 @@ import (
 	"github.com/vietrix/vbuild/internal/config"
 )
 
-func (r *Runner) collectArtifacts(taskName string, task *config.Task, vars map[string]string) error {
+func (r *Runner) collectArtifacts(taskName string, task *config.Task, vars map[string]string) ([]string, error) {
 	if task == nil || len(task.Artifacts) == 0 {
-		return nil
+		return nil, nil
 	}
 	destRoot := r.artifactsRoot(taskName)
 	if err := os.MkdirAll(destRoot, 0o755); err != nil {
-		return fmt.Errorf("create artifacts dir: %w", err)
+		return nil, fmt.Errorf("create artifacts dir: %w", err)
 	}
 
 	paths, err := r.resolvePatterns(task.Artifacts, vars)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	collected := []string{}
 	for _, path := range paths {
 		info, err := os.Stat(path)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if info.IsDir() {
 			dest := filepath.Join(destRoot, filepath.Base(path))
 			if err := copyDir(path, dest); err != nil {
-				return err
+				return nil, err
 			}
-			collected = append(collected, dest)
 			continue
 		}
 		dest := filepath.Join(destRoot, filepath.Base(path))
 		if err := copyFile(path, dest); err != nil {
-			return err
+			return nil, err
 		}
-		collected = append(collected, dest)
 	}
-	if err := writeArtifactChecksums(destRoot, collected); err != nil {
-		return err
+	files, err := listFiles(destRoot)
+	if err != nil {
+		return nil, err
 	}
-	return nil
+	if err := writeArtifactChecksums(destRoot, files); err != nil {
+		return nil, err
+	}
+	files, _ = listFiles(destRoot)
+	return files, nil
 }
 
 func (r *Runner) artifactsRoot(taskName string) string {
@@ -167,4 +169,19 @@ func sha256File(path string) (string, error) {
 		return "", err
 	}
 	return fmt.Sprintf("%x", hash.Sum(nil)), nil
+}
+
+func listFiles(root string) ([]string, error) {
+	out := []string{}
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		out = append(out, path)
+		return nil
+	})
+	return out, err
 }

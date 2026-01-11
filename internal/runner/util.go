@@ -9,9 +9,10 @@ import (
 )
 
 type commandError struct {
-	cmd  string
-	code int
-	err  error
+	cmd    string
+	code   int
+	signal string
+	err    error
 }
 
 func (e *commandError) Error() string {
@@ -24,6 +25,10 @@ func (e *commandError) Unwrap() error {
 
 func (e *commandError) ExitCode() int {
 	return e.code
+}
+
+func (e *commandError) SignalName() string {
+	return e.signal
 }
 
 func mergeEnv(base []string, overlays ...map[string]string) []string {

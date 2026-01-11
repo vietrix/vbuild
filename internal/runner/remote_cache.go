@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/minio/minio-go/v7"
-	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/vietrix/vbuild/internal/config"
 )
 
@@ -83,12 +82,7 @@ func newRemoteCache(cfg *config.CacheRemote, root string, log *logger) remoteCac
 		return nil
 	}
 
-	var creds *credentials.Credentials
-	if cfg.AccessKey != "" || cfg.SecretKey != "" {
-		creds = credentials.NewStaticV4(cfg.AccessKey, cfg.SecretKey, cfg.SessionToken)
-	} else {
-		creds = credentials.NewEnvAWS()
-	}
+	creds := resolveS3Credentials(provider, cfg.AccessKey, cfg.SecretKey, cfg.SessionToken)
 
 	opts := &minio.Options{
 		Creds:  creds,

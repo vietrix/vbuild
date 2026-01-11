@@ -4,6 +4,7 @@ go 1.22
 
 require (
 	github.com/bmatcuk/doublestar/v4 v4.9.2
+	github.com/fsnotify/fsnotify v1.7.0
 	github.com/minio/minio-go/v7 v7.0.75
 	golang.org/x/term v0.22.0
 	gopkg.in/yaml.v3 v3.0.1

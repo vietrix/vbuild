@@ -2,7 +2,7 @@ workflow: "vbuild public"
 
 vars:
   APP: vbuild
-  VERSION: v0.0.4
+  VERSION: v0.0.5
 
 env:
   CGO_ENABLED: "0"
@@ -14,12 +14,14 @@ tasks:
 
   format:
     desc: format Go code
+    aliases: [fmt]
     tags: [fmt]
     run:
       - gofmt -w .
 
   test:
     desc: run tests
+    aliases: [tests]
     tags: [test]
     run:
       - go test ./...
@@ -33,6 +35,8 @@ tasks:
       - "**/*.go"
     outputs:
       - "{{APP}}"
+    output:
+      BIN: "{{APP}}"
     cache: mtime
     run:
       - go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version={{VERSION}}" -o {{APP}} ./cmd/vbuild

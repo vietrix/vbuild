@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"sort"
@@ -35,19 +36,23 @@ type taskResult struct {
 }
 
 type commandOptions struct {
-	env        []string
-	vars       map[string]string
-	prefixed   bool
-	retries    int
-	backoff    time.Duration
-	timeout    time.Duration
-	shell      string
-	workdir    string
-	secrets    []string
-	retryCodes []int
-	retryRegex []string
-	limits     *config.ResourceLimits
-	remote     *config.RemoteSpec
+	env          []string
+	vars         map[string]string
+	prefixed     bool
+	retries      int
+	backoff      time.Duration
+	jitter       time.Duration
+	timeout      time.Duration
+	shell        string
+	workdir      string
+	secrets      []string
+	retryCodes   []int
+	retryRegex   []string
+	retrySignals []string
+	limits       *config.ResourceLimits
+	remote       *config.RemoteSpec
+	silent       bool
+	capture      *captureSpec
 }
 
 func (r *Runner) printDryRun(plan *taskPlan) {
@@ -140,7 +145,12 @@ func (r *Runner) executePlan(plan *taskPlan) error {
 	results := make(map[string]taskResult, len(plan.tasks))
 	running := 0
 	var firstErr error
-	cancelOnError := !r.opts.ContinueOnError
+	cancelOnError := !r.opts.ContinueOnError || r.opts.FailFast
+
+	progress := newProgressTracker(len(plan.tasks), r.log.err, r.opts.Progress && !r.opts.JSON)
+	if progress.Enabled() {
+		progress.Render()
+	}
 
 	var sem chan struct{}
 	if r.opts.MaxParallel > 0 {
@@ -185,9 +195,15 @@ func (r *Runner) executePlan(plan *taskPlan) error {
 			firstErr = result.err
 		}
 		if result.status == statusFailed && cancelOnError {
-			if task, ok := plan.tasks[result.name]; !ok || !task.ContinueOnError {
+			if r.opts.FailFast {
+				cancel()
+			} else if task, ok := plan.tasks[result.name]; !ok || !task.ContinueOnError {
 				cancel()
 			}
+		}
+
+		if progress.Enabled() {
+			progress.Update(result)
 		}
 
 		for _, dependent := range plan.dependents[result.name] {
@@ -207,6 +223,9 @@ func (r *Runner) executePlan(plan *taskPlan) error {
 		}
 	}
 
+	if progress.Enabled() {
+		progress.Finish()
+	}
 	r.printSummary(plan, results, time.Since(start))
 	return firstErr
 }
@@ -254,14 +273,36 @@ func (r *Runner) runTask(ctx context.Context, plan *taskPlan, name string, task 
 			return taskResult{name: name, status: statusSkipped, reason: "condition"}
 		}
 	}
+	if task.OnlyOn != nil {
+		if !matchOnlyOn(task.OnlyOn, r.gitVars) {
+			r.log.Printf("==> %s skipped (only_on)\n", name)
+			endTrace(statusSkipped, time.Since(start))
+			return taskResult{name: name, status: statusSkipped, reason: "only_on"}
+		}
+	}
 
 	if err := ctx.Err(); err != nil {
 		endTrace(statusCanceled, time.Since(start))
 		return taskResult{name: name, status: statusCanceled, err: err}
 	}
 
+	if task.IfMissing {
+		missing, err := r.outputsMissing(task, vars)
+		if err != nil {
+			endTrace(statusFailed, time.Since(start))
+			return taskResult{name: name, status: statusFailed, err: err}
+		}
+		if !missing {
+			r.log.Printf("==> %s skipped (outputs exist)\n", name)
+			r.recordOutputs(name, task, vars)
+			endTrace(statusUpToDate, time.Since(start))
+			return taskResult{name: name, status: statusUpToDate, reason: "outputs exist"}
+		}
+	}
+
 	if shouldSkip, reason := r.cacheSkip(name, task, vars); shouldSkip {
 		r.log.Printf("==> %s skipped (%s)\n", name, reason)
+		r.recordOutputs(name, task, vars)
 		endTrace(statusUpToDate, time.Since(start))
 		return taskResult{name: name, status: statusUpToDate, reason: reason}
 	}
@@ -275,6 +316,11 @@ func (r *Runner) runTask(ctx context.Context, plan *taskPlan, name string, task 
 		}
 	}
 
+	if err := r.checkRequirements(task.Require); err != nil {
+		endTrace(statusFailed, time.Since(start))
+		return taskResult{name: name, status: statusFailed, err: err}
+	}
+
 	r.log.Printf("==> %s\n", name)
 
 	if err := r.runPlugins(ctx, "task_start", name, "running", 0); err != nil {
@@ -285,6 +331,7 @@ func (r *Runner) runTask(ctx context.Context, plan *taskPlan, name string, task 
 	commands := r.taskCommands(task, vars)
 	if len(commands) == 0 && len(task.Pre) == 0 && len(task.Post) == 0 {
 		duration := time.Since(start)
+		r.recordOutputs(name, task, vars)
 		r.log.Printf("==> %s completed in %s\n", name, formatDuration(duration))
 		_ = r.runPlugins(ctx, "task_end", name, "ok", duration)
 		endTrace(statusOK, duration)
@@ -292,17 +339,30 @@ func (r *Runner) runTask(ctx context.Context, plan *taskPlan, name string, task 
 	}
 
 	prefixed := plan.prefixOutput || task.Parallel
-	retries := task.Retries
+	retries := effectiveRetries(task, r.cfg)
 	backoff := parseDuration(task.Backoff)
+	jitter := parseDuration(task.Jitter)
+	if backoff == 0 && r.cfg != nil && r.cfg.Defaults != nil {
+		backoff = parseDuration(r.cfg.Defaults.Backoff)
+	}
+	if jitter == 0 && r.cfg != nil && r.cfg.Defaults != nil {
+		jitter = parseDuration(r.cfg.Defaults.Jitter)
+	}
 	timeout := parseDuration(task.Timeout)
 	if timeout == 0 && r.opts.Timeout > 0 {
 		timeout = r.opts.Timeout
+	}
+	if timeout == 0 && r.cfg != nil && r.cfg.Defaults != nil {
+		timeout = parseDuration(r.cfg.Defaults.Timeout)
 	}
 	if timeout == 0 && r.cfg != nil {
 		timeout = parseDuration(r.cfg.Timeout)
 	}
 
 	workdir := expandVars(task.Workdir, vars)
+	if workdir == "" && r.cfg != nil && r.cfg.Defaults != nil {
+		workdir = expandVars(r.cfg.Defaults.Workdir, vars)
+	}
 	if task.Remote != nil && task.Remote.Workdir != "" {
 		workdir = expandVars(task.Remote.Workdir, vars)
 	}
@@ -310,6 +370,9 @@ func (r *Runner) runTask(ctx context.Context, plan *taskPlan, name string, task 
 		workdir = r.resolvePath(workdir)
 	}
 	shell := task.Shell
+	if shell == "" && r.cfg != nil && r.cfg.Defaults != nil {
+		shell = r.cfg.Defaults.Shell
+	}
 	secrets := r.taskSecrets(task, envMap)
 	if task.Isolate && task.Remote != nil {
 		runErr := fmt.Errorf("task %s cannot use isolate with remote", name)
@@ -331,20 +394,34 @@ func (r *Runner) runTask(ctx context.Context, plan *taskPlan, name string, task 
 		workdir = sandbox.workdir
 	}
 
+	captureSpec, err := r.prepareCapture(task, vars)
+	if err != nil {
+		_ = r.runPlugins(ctx, "task_end", name, "failed", time.Since(start))
+		endTrace(statusFailed, time.Since(start))
+		return taskResult{name: name, duration: time.Since(start), status: statusFailed, err: err}
+	}
+	if captureSpec != nil {
+		defer captureSpec.Close()
+	}
+
 	cmdOpts := commandOptions{
-		env:        env,
-		vars:       vars,
-		prefixed:   prefixed,
-		retries:    retries,
-		backoff:    backoff,
-		timeout:    timeout,
-		shell:      shell,
-		workdir:    workdir,
-		secrets:    secrets,
-		retryCodes: task.RetryOnExitCodes,
-		retryRegex: task.RetryOnRegex,
-		limits:     task.Limits,
-		remote:     task.Remote,
+		env:          env,
+		vars:         vars,
+		prefixed:     prefixed,
+		retries:      retries,
+		backoff:      backoff,
+		jitter:       jitter,
+		timeout:      timeout,
+		shell:        shell,
+		workdir:      workdir,
+		secrets:      secrets,
+		retryCodes:   task.RetryOnExitCodes,
+		retryRegex:   task.RetryOnRegex,
+		retrySignals: task.RetryOnSignal,
+		limits:       task.Limits,
+		remote:       task.Remote,
+		silent:       task.Silent,
+		capture:      captureSpec,
 	}
 
 	runErr := r.runCommands(ctx, name, task.Pre, cmdOpts, false)
@@ -382,13 +459,21 @@ func (r *Runner) runTask(ctx context.Context, plan *taskPlan, name string, task 
 		}
 	}
 
-	if err := r.collectArtifacts(name, task, vars); err != nil {
+	artifacts, err := r.collectArtifacts(name, task, vars)
+	if err != nil {
 		r.log.Errorf("==> %s artifacts failed: %v\n", name, err)
 		_ = r.runPlugins(ctx, "task_end", name, "failed", duration)
 		endTrace(statusFailed, duration)
 		return taskResult{name: name, duration: duration, status: statusFailed, err: err}
 	}
+	if err := r.uploadArtifacts(name, artifacts); err != nil {
+		r.log.Errorf("==> %s artifacts upload failed: %v\n", name, err)
+		_ = r.runPlugins(ctx, "task_end", name, "failed", duration)
+		endTrace(statusFailed, duration)
+		return taskResult{name: name, duration: duration, status: statusFailed, err: err}
+	}
 
+	r.recordOutputs(name, task, vars)
 	r.applyExports(task, vars)
 
 	if err := r.cacheSave(name, task, vars); err != nil {
@@ -413,6 +498,9 @@ func (r *Runner) taskVars(plan *taskPlan, name string, task *config.Task) map[st
 		if value != "" {
 			vars[key] = value
 		}
+	}
+	for key, value := range r.outputsForDeps(plan, name) {
+		vars[key] = value
 	}
 	for key, value := range task.Vars {
 		vars[key] = value
@@ -589,12 +677,16 @@ func (r *Runner) runCommandWithRetry(ctx context.Context, taskName string, comma
 			return err
 		}
 		output := capture.String()
-		if !shouldRetryCommand(err, output, opts.retryCodes, regexes) {
+		if !shouldRetryCommand(err, output, opts.retryCodes, regexes, opts.retrySignals) {
 			return err
 		}
 		if opts.backoff > 0 {
+			delay := opts.backoff * time.Duration(attempt)
+			if opts.jitter > 0 {
+				delay += r.randomJitter(opts.jitter)
+			}
 			select {
-			case <-time.After(opts.backoff * time.Duration(attempt)):
+			case <-time.After(delay):
 			case <-ctx.Done():
 				return ctx.Err()
 			}
@@ -620,6 +712,22 @@ func (r *Runner) runCommand(ctx context.Context, taskName string, command string
 
 	stdout := r.log.commandWriter(prefix, "stdout", opts.secrets)
 	stderr := r.log.commandWriter(prefix, "stderr", opts.secrets)
+	if opts.silent {
+		stdout = io.Discard
+		stderr = io.Discard
+	}
+	if opts.capture != nil {
+		if opts.capture.Combined != nil {
+			stdout = newMultiWriter(stdout, opts.capture.Combined)
+			stderr = newMultiWriter(stderr, opts.capture.Combined)
+		}
+		if opts.capture.Stdout != nil {
+			stdout = newMultiWriter(stdout, opts.capture.Stdout)
+		}
+		if opts.capture.Stderr != nil {
+			stderr = newMultiWriter(stderr, opts.capture.Stderr)
+		}
+	}
 	if capture != nil {
 		stdout = newCaptureWriter(stdout, capture)
 		stderr = newCaptureWriter(stderr, capture)
@@ -636,7 +744,7 @@ func (r *Runner) runCommand(ctx context.Context, taskName string, command string
 		if errors.As(err, &exitErr) {
 			exitCode = exitErr.ExitCode()
 		}
-		return &commandError{cmd: command, code: exitCode, err: err}
+		return &commandError{cmd: command, code: exitCode, signal: platform.ExitSignal(err), err: err}
 	}
 
 	if flusher, ok := cmd.Stdout.(interface{ Flush() }); ok {
@@ -650,39 +758,30 @@ func (r *Runner) runCommand(ctx context.Context, taskName string, command string
 }
 
 func (r *Runner) printSummary(plan *taskPlan, results map[string]taskResult, total time.Duration) {
-	okCount := 0
-	failCount := 0
-	skipCount := 0
-	upToDateCount := 0
-
+	summary := buildSummary(plan, results, total)
 	r.log.Printf("==> summary\n")
 	for _, name := range plan.order {
 		result, ok := results[name]
 		if !ok {
-			skipCount++
 			r.log.Printf("%s skipped\n", name)
 			continue
 		}
 		switch result.status {
 		case statusFailed:
-			failCount++
 			r.log.Printf("%s failed in %s\n", name, formatDuration(result.duration))
 		case statusUpToDate:
-			upToDateCount++
 			if r.opts.Explain && result.reason != "" {
 				r.log.Printf("%s up-to-date (%s)\n", name, result.reason)
 			} else {
 				r.log.Printf("%s up-to-date\n", name)
 			}
 		case statusSkipped, statusCanceled:
-			skipCount++
 			if r.opts.Explain && result.reason != "" {
 				r.log.Printf("%s skipped (%s)\n", name, result.reason)
 			} else {
 				r.log.Printf("%s skipped\n", name)
 			}
 		default:
-			okCount++
 			if r.opts.Explain && result.reason != "" {
 				r.log.Printf("%s completed in %s (%s)\n", name, formatDuration(result.duration), result.reason)
 			} else {
@@ -691,9 +790,10 @@ func (r *Runner) printSummary(plan *taskPlan, results map[string]taskResult, tot
 		}
 	}
 
-	r.log.Printf("==> total %s (ok=%d failed=%d skipped=%d up-to-date=%d)\n", formatDuration(total), okCount, failCount, skipCount, upToDateCount)
+	r.log.Printf("==> total %s (ok=%d failed=%d skipped=%d up-to-date=%d)\n", summary.TotalDuration, summary.Ok, summary.Failed, summary.Skipped, summary.UpToDate)
 
 	if r.opts.Profile {
 		r.printProfile(plan, results)
 	}
+	r.writeSummaryJSON(summary)
 }

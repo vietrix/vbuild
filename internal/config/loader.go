@@ -2,6 +2,8 @@ package config
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,11 +13,13 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/bmatcuk/doublestar/v4"
 	"gopkg.in/yaml.v3"
 )
 
 func Load(path string) (*Config, error) {
-	cfg, err := loadRecursive(path, map[string]bool{})
+	sources := map[string][]byte{}
+	cfg, err := loadRecursive(path, map[string]bool{}, sources)
 	if err != nil {
 		return nil, err
 	}
@@ -27,6 +31,8 @@ func Load(path string) (*Config, error) {
 	} else {
 		cfg.Path = path
 	}
+	cfg.Hash = configHash(sources)
+	cfg.Sources = sortedKeys(sources)
 
 	cfg.normalize()
 	cfg.applyEnvOverrides()
@@ -39,7 +45,7 @@ func Load(path string) (*Config, error) {
 	return cfg, nil
 }
 
-func loadRecursive(path string, visited map[string]bool) (*Config, error) {
+func loadRecursive(path string, visited map[string]bool, sources map[string][]byte) (*Config, error) {
 	autoIncludes := []string{}
 	if !isURL(path) {
 		autoIncludes = append(autoIncludes, autoIncludeDir(path)...)
@@ -58,6 +64,9 @@ func loadRecursive(path string, visited map[string]bool) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	if _, ok := sources[key]; !ok {
+		sources[key] = data
+	}
 
 	var cfg Config
 	decoder := yaml.NewDecoder(bytes.NewReader(data))
@@ -70,28 +79,18 @@ func loadRecursive(path string, visited map[string]bool) (*Config, error) {
 	base := &Config{}
 	base.normalize()
 
-	for _, inc := range autoIncludes {
-		resolved, err := resolveInclude(path, inc)
-		if err != nil {
-			return nil, err
-		}
-		child, err := loadRecursive(resolved, visited)
-		if err != nil {
-			return nil, err
-		}
-		base = mergeConfigs(base, child)
+	allIncludes := append([]string{}, autoIncludes...)
+	allIncludes = append(allIncludes, cfg.Include...)
+	expanded, err := expandIncludes(path, allIncludes)
+	if err != nil {
+		return nil, err
 	}
-
-	for _, inc := range cfg.Include {
-		inc = strings.TrimSpace(inc)
-		if inc == "" {
-			continue
-		}
+	for _, inc := range expanded {
 		resolved, err := resolveInclude(path, inc)
 		if err != nil {
 			return nil, err
 		}
-		child, err := loadRecursive(resolved, visited)
+		child, err := loadRecursive(resolved, visited, sources)
 		if err != nil {
 			return nil, err
 		}
@@ -173,7 +172,10 @@ func mergeConfigs(base, overlay *Config) *Config {
 		out.EnvFile = base.EnvFile
 		out.ArtifactsDir = base.ArtifactsDir
 		out.Timeout = base.Timeout
+		out.Defaults = mergeDefaults(out.Defaults, base.Defaults)
+		out.FailFast = base.FailFast
 		out.CacheRemote = base.CacheRemote
+		out.Artifacts = base.Artifacts
 		out.Vars = mergeStringMap(out.Vars, base.Vars)
 		out.Env = mergeStringMap(out.Env, base.Env)
 		out.Tasks = mergeTaskMap(out.Tasks, base.Tasks)
@@ -196,8 +198,15 @@ func mergeConfigs(base, overlay *Config) *Config {
 		if overlay.Timeout != "" {
 			out.Timeout = overlay.Timeout
 		}
+		out.Defaults = mergeDefaults(out.Defaults, overlay.Defaults)
+		if overlay.FailFast {
+			out.FailFast = true
+		}
 		if overlay.CacheRemote != nil {
 			out.CacheRemote = overlay.CacheRemote
+		}
+		if overlay.Artifacts != nil {
+			out.Artifacts = overlay.Artifacts
 		}
 		out.Vars = mergeStringMap(out.Vars, overlay.Vars)
 		out.Env = mergeStringMap(out.Env, overlay.Env)
@@ -247,19 +256,36 @@ func cloneTask(task *Task) *Task {
 	out.Run = append([]string(nil), task.Run...)
 	out.Pre = append([]string(nil), task.Pre...)
 	out.Post = append([]string(nil), task.Post...)
+	out.Aliases = append([]string(nil), task.Aliases...)
 	out.Tags = append([]string(nil), task.Tags...)
 	out.Secrets = append([]string(nil), task.Secrets...)
 	out.Inputs = append([]string(nil), task.Inputs...)
 	out.Outputs = append([]string(nil), task.Outputs...)
 	out.OutputPaths = append([]string(nil), task.OutputPaths...)
+	if task.Output != nil {
+		out.Output = map[string]string{}
+		for k, v := range task.Output {
+			out.Output[k] = v
+		}
+	}
+	if task.Capture != nil {
+		capture := *task.Capture
+		out.Capture = &capture
+	}
 	out.Watch = append([]string(nil), task.Watch...)
 	out.Artifacts = append([]string(nil), task.Artifacts...)
 	out.RetryOnExitCodes = append([]int(nil), task.RetryOnExitCodes...)
 	out.RetryOnRegex = append([]string(nil), task.RetryOnRegex...)
+	out.RetryOnSignal = append([]string(nil), task.RetryOnSignal...)
+	out.Require = append([]string(nil), task.Require...)
 	out.Fanout = task.Fanout
 	out.Isolate = task.Isolate
 	out.ContinueOnError = task.ContinueOnError
 	out.AllowFailure = task.AllowFailure
+	out.Silent = task.Silent
+	out.IfMissing = task.IfMissing
+	out.MaxRetries = task.MaxRetries
+	out.Jitter = task.Jitter
 	if task.Env != nil {
 		out.Env = map[string]string{}
 		for k, v := range task.Env {
@@ -277,6 +303,12 @@ func cloneTask(task *Task) *Task {
 		for k, v := range task.Exports {
 			out.Exports[k] = v
 		}
+	}
+	if task.OnlyOn != nil {
+		only := *task.OnlyOn
+		only.Branches = append([]string(nil), task.OnlyOn.Branches...)
+		only.Tags = append([]string(nil), task.OnlyOn.Tags...)
+		out.OnlyOn = &only
 	}
 	if task.With != nil {
 		out.With = map[string]string{}
@@ -332,22 +364,7 @@ func cloneDocker(spec *DockerSpec) *DockerSpec {
 
 func autoIncludeDir(basePath string) []string {
 	dir := filepath.Join(filepath.Dir(basePath), ".vbuild.d")
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil
-	}
-	names := []string{}
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		name := entry.Name()
-		if strings.HasSuffix(name, ".yml") || strings.HasSuffix(name, ".yaml") {
-			names = append(names, filepath.Join(dir, name))
-		}
-	}
-	sort.Strings(names)
-	return names
+	return listYamlFiles(dir)
 }
 
 func ioReadAll(r io.Reader) ([]byte, error) {
@@ -356,4 +373,117 @@ func ioReadAll(r io.Reader) ([]byte, error) {
 		return nil, err
 	}
 	return body, nil
+}
+
+func listYamlFiles(root string) []string {
+	entries := []string{}
+	if _, err := os.Stat(root); err != nil {
+		return entries
+	}
+	_ = filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		name := entry.Name()
+		if strings.HasSuffix(name, ".yml") || strings.HasSuffix(name, ".yaml") {
+			entries = append(entries, path)
+		}
+		return nil
+	})
+	sort.Strings(entries)
+	return entries
+}
+
+func expandIncludes(basePath string, includes []string) ([]string, error) {
+	out := []string{}
+	for _, inc := range includes {
+		inc = strings.TrimSpace(inc)
+		if inc == "" {
+			continue
+		}
+		if isURL(inc) {
+			out = append(out, inc)
+			continue
+		}
+		resolved, err := resolveInclude(basePath, inc)
+		if err != nil {
+			return nil, err
+		}
+		if !hasGlob(resolved) {
+			out = append(out, resolved)
+			continue
+		}
+		matches, err := doublestar.FilepathGlob(resolved)
+		if err != nil {
+			return nil, err
+		}
+		if len(matches) == 0 {
+			return nil, fmt.Errorf("include pattern matched no files: %s", inc)
+		}
+		sort.Strings(matches)
+		out = append(out, matches...)
+	}
+	return dedupeStrings(out), nil
+}
+
+func hasGlob(path string) bool {
+	return strings.ContainsAny(path, "*?[") || strings.Contains(path, "**")
+}
+
+func configHash(sources map[string][]byte) string {
+	keys := sortedKeys(sources)
+	h := sha256.New()
+	for _, key := range keys {
+		_, _ = h.Write([]byte(key))
+		_, _ = h.Write([]byte{0})
+		_, _ = h.Write(sources[key])
+		_, _ = h.Write([]byte{0})
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+func sortedKeys(values map[string][]byte) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func mergeDefaults(base, overlay *Defaults) *Defaults {
+	if base == nil && overlay == nil {
+		return nil
+	}
+	out := &Defaults{}
+	if base != nil {
+		*out = *base
+	}
+	if overlay != nil {
+		if overlay.Timeout != "" {
+			out.Timeout = overlay.Timeout
+		}
+		if overlay.Shell != "" {
+			out.Shell = overlay.Shell
+		}
+		if overlay.Workdir != "" {
+			out.Workdir = overlay.Workdir
+		}
+		if overlay.Retries != 0 {
+			out.Retries = overlay.Retries
+		}
+		if overlay.MaxRetries != 0 {
+			out.MaxRetries = overlay.MaxRetries
+		}
+		if overlay.Backoff != "" {
+			out.Backoff = overlay.Backoff
+		}
+		if overlay.Jitter != "" {
+			out.Jitter = overlay.Jitter
+		}
+	}
+	return out
 }

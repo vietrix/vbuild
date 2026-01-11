@@ -41,6 +41,7 @@ func (c *Config) resolveTemplates() error {
 		c.Tasks[name] = merged
 	}
 	c.normalizeTasks()
+	c.buildAliases()
 	return nil
 }
 
@@ -56,6 +57,7 @@ func mergeTask(base, overlay *Task) *Task {
 	if overlay.Desc != "" {
 		out.Desc = overlay.Desc
 	}
+	out.Aliases = append(out.Aliases, overlay.Aliases...)
 	out.Deps = append(out.Deps, overlay.Deps...)
 	out.Needs = append(out.Needs, overlay.Needs...)
 	out.DependsOn = append(out.DependsOn, overlay.DependsOn...)
@@ -80,6 +82,12 @@ func mergeTask(base, overlay *Task) *Task {
 	if overlay.When != "" {
 		out.When = overlay.When
 	}
+	if overlay.OnlyOn != nil {
+		only := *overlay.OnlyOn
+		only.Branches = append([]string(nil), overlay.OnlyOn.Branches...)
+		only.Tags = append([]string(nil), overlay.OnlyOn.Tags...)
+		out.OnlyOn = &only
+	}
 	if overlay.Cache != "" {
 		out.Cache = overlay.Cache
 	}
@@ -89,14 +97,23 @@ func mergeTask(base, overlay *Task) *Task {
 	if overlay.Backoff != "" {
 		out.Backoff = overlay.Backoff
 	}
+	if overlay.Jitter != "" {
+		out.Jitter = overlay.Jitter
+	}
 	if overlay.Retries > 0 {
 		out.Retries = overlay.Retries
+	}
+	if overlay.MaxRetries > 0 {
+		out.MaxRetries = overlay.MaxRetries
 	}
 	if len(overlay.RetryOnExitCodes) > 0 {
 		out.RetryOnExitCodes = append([]int(nil), overlay.RetryOnExitCodes...)
 	}
 	if len(overlay.RetryOnRegex) > 0 {
 		out.RetryOnRegex = append([]string(nil), overlay.RetryOnRegex...)
+	}
+	if len(overlay.RetryOnSignal) > 0 {
+		out.RetryOnSignal = append([]string(nil), overlay.RetryOnSignal...)
 	}
 	if overlay.ContinueOnError {
 		out.ContinueOnError = true
@@ -110,6 +127,12 @@ func mergeTask(base, overlay *Task) *Task {
 	if overlay.Isolate {
 		out.Isolate = true
 	}
+	if overlay.Silent {
+		out.Silent = true
+	}
+	if overlay.IfMissing {
+		out.IfMissing = true
+	}
 	if overlay.Limits != nil {
 		limits := *overlay.Limits
 		out.Limits = &limits
@@ -121,11 +144,17 @@ func mergeTask(base, overlay *Task) *Task {
 	out.Inputs = append(out.Inputs, overlay.Inputs...)
 	out.Outputs = append(out.Outputs, overlay.Outputs...)
 	out.OutputPaths = append(out.OutputPaths, overlay.OutputPaths...)
+	out.Output = mergeStringMap(out.Output, overlay.Output)
+	if overlay.Capture != nil {
+		capture := *overlay.Capture
+		out.Capture = &capture
+	}
 	out.Exports = mergeStringMap(out.Exports, overlay.Exports)
 	out.Watch = append(out.Watch, overlay.Watch...)
 	out.Artifacts = append(out.Artifacts, overlay.Artifacts...)
 	out.Tags = append(out.Tags, overlay.Tags...)
 	out.Secrets = append(out.Secrets, overlay.Secrets...)
+	out.Require = append(out.Require, overlay.Require...)
 	if overlay.Matrix != nil {
 		out.Matrix = mergeMatrix(out.Matrix, overlay.Matrix)
 	}
