@@ -190,6 +190,171 @@ func runClean(cfg *config.Config, opts runner.Options, stdout, stderr io.Writer)
 	return 0
 }
 
+func runDataset(args []string, cfg *config.Config, opts runner.Options, stdout, stderr io.Writer) int {
+	flags := flag.NewFlagSet("dataset", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	version := flags.String("version", "", "dataset version")
+	jsonOut := flags.Bool("json", false, "emit JSON")
+	if err := flags.Parse(args); err != nil {
+		return 2
+	}
+	rest := flags.Args()
+	sub := "list"
+	if len(rest) > 0 {
+		sub = rest[0]
+		rest = rest[1:]
+	}
+	r := runner.New(cfg, opts, stdout, stderr)
+	switch sub {
+	case "list":
+		datasets, err := r.ListDatasets()
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		if *jsonOut {
+			data, _ := json.MarshalIndent(datasets, "", "  ")
+			fmt.Fprintln(stdout, string(data))
+			return 0
+		}
+		for _, ds := range datasets {
+			fmt.Fprintf(stdout, "%s@%s %s\n", ds.Name, ds.Version, ds.Path)
+		}
+		return 0
+	case "show":
+		if len(rest) == 0 {
+			fmt.Fprintln(stderr, "dataset name is required")
+			return 2
+		}
+		entry, err := r.GetDataset(rest[0], *version)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		data, _ := json.MarshalIndent(entry, "", "  ")
+		fmt.Fprintln(stdout, string(data))
+		return 0
+	default:
+		fmt.Fprintf(stderr, "unknown dataset command: %s\n", sub)
+		return 2
+	}
+}
+
+func runExperiment(args []string, cfg *config.Config, opts runner.Options, stdout, stderr io.Writer) int {
+	flags := flag.NewFlagSet("experiment", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	jsonOut := flags.Bool("json", false, "emit JSON")
+	if err := flags.Parse(args); err != nil {
+		return 2
+	}
+	rest := flags.Args()
+	sub := "list"
+	if len(rest) > 0 {
+		sub = rest[0]
+		rest = rest[1:]
+	}
+	r := runner.New(cfg, opts, stdout, stderr)
+	switch sub {
+	case "list":
+		experiments, err := r.ListExperiments()
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		if *jsonOut {
+			data, _ := json.MarshalIndent(experiments, "", "  ")
+			fmt.Fprintln(stdout, string(data))
+			return 0
+		}
+		for _, exp := range experiments {
+			fmt.Fprintf(stdout, "%s %s %s\n", exp.ID, exp.Task, exp.Status)
+		}
+		return 0
+	case "show":
+		if len(rest) == 0 {
+			fmt.Fprintln(stderr, "experiment id is required")
+			return 2
+		}
+		record, err := r.GetExperiment(rest[0])
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		data, _ := json.MarshalIndent(record, "", "  ")
+		fmt.Fprintln(stdout, string(data))
+		return 0
+	default:
+		fmt.Fprintf(stderr, "unknown experiment command: %s\n", sub)
+		return 2
+	}
+}
+
+func runLineage(args []string, cfg *config.Config, opts runner.Options, stdout, stderr io.Writer) int {
+	flags := flag.NewFlagSet("lineage", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	format := flags.String("format", "json", "output format (json|dot)")
+	if err := flags.Parse(args); err != nil {
+		return 2
+	}
+	r := runner.New(cfg, opts, stdout, stderr)
+	if err := r.Lineage(*format, stdout); err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	return 0
+}
+
+func runRegistry(args []string, cfg *config.Config, opts runner.Options, stdout, stderr io.Writer) int {
+	flags := flag.NewFlagSet("registry", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	if err := flags.Parse(args); err != nil {
+		return 2
+	}
+	sub := "status"
+	rest := flags.Args()
+	if len(rest) > 0 {
+		sub = rest[0]
+	}
+	r := runner.New(cfg, opts, stdout, stderr)
+	switch sub {
+	case "push":
+		if err := r.RegistryPush(); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		fmt.Fprintln(stdout, "registry pushed")
+		return 0
+	case "pull":
+		if err := r.RegistryPull(); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		fmt.Fprintln(stdout, "registry pulled")
+		return 0
+	case "status":
+		fmt.Fprintf(stdout, "registry: %s\n", r.RegistryRoot())
+		return 0
+	default:
+		fmt.Fprintf(stderr, "unknown registry command: %s\n", sub)
+		return 2
+	}
+}
+
+func runReport(args []string, cfg *config.Config, opts runner.Options, stdout, stderr io.Writer) int {
+	flags := flag.NewFlagSet("report", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	outPath := flags.String("out", "-", "output path ('-' for stdout)")
+	if err := flags.Parse(args); err != nil {
+		return 2
+	}
+	r := runner.New(cfg, opts, stdout, stderr)
+	if err := r.Report(*outPath); err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	return 0
+}
+
 func runShell(args []string, cfg *config.Config, opts runner.Options, stdout, stderr io.Writer) int {
 	shellFlags := flag.NewFlagSet("shell", flag.ContinueOnError)
 	shellFlags.SetOutput(stderr)

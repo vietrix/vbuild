@@ -121,6 +121,19 @@ func mergeTask(base, overlay *Task) *Task {
 	if overlay.AllowFailure {
 		out.AllowFailure = true
 	}
+	if overlay.Priority != 0 {
+		out.Priority = overlay.Priority
+	}
+	if overlay.Group != "" {
+		out.Group = overlay.Group
+	}
+	if overlay.RunDir != "" {
+		out.RunDir = overlay.RunDir
+	}
+	if overlay.Seed != 0 {
+		out.Seed = overlay.Seed
+	}
+	out.SeedEnv = mergeStringMap(out.SeedEnv, overlay.SeedEnv)
 	if overlay.Confirm != "" {
 		out.Confirm = overlay.Confirm
 	}
@@ -137,9 +150,18 @@ func mergeTask(base, overlay *Task) *Task {
 		limits := *overlay.Limits
 		out.Limits = &limits
 	}
+	if overlay.Resources != nil {
+		res := *overlay.Resources
+		out.Resources = &res
+	}
 	if overlay.Remote != nil {
 		remote := *overlay.Remote
 		out.Remote = &remote
+	}
+	if overlay.Scheduler != nil {
+		scheduler := *overlay.Scheduler
+		scheduler.Args = append([]string(nil), overlay.Scheduler.Args...)
+		out.Scheduler = &scheduler
 	}
 	out.Inputs = append(out.Inputs, overlay.Inputs...)
 	out.Outputs = append(out.Outputs, overlay.Outputs...)
@@ -155,8 +177,62 @@ func mergeTask(base, overlay *Task) *Task {
 	out.Tags = append(out.Tags, overlay.Tags...)
 	out.Secrets = append(out.Secrets, overlay.Secrets...)
 	out.Require = append(out.Require, overlay.Require...)
+	if len(overlay.Datasets) > 0 {
+		out.Datasets = append(out.Datasets, overlay.Datasets...)
+	}
+	if len(overlay.DatasetOutputs) > 0 {
+		out.DatasetOutputs = append(out.DatasetOutputs, overlay.DatasetOutputs...)
+	}
+	if overlay.Split != nil {
+		out.Split = cloneSplitSpec(overlay.Split)
+	}
+	if overlay.Validate != nil {
+		out.Validate = cloneValidateSpec(overlay.Validate)
+	}
+	if overlay.Stats != nil {
+		out.Stats = cloneStatsSpec(overlay.Stats)
+	}
+	if overlay.Metrics != nil {
+		out.Metrics = cloneMetricsSpec(overlay.Metrics)
+	}
+	if overlay.Canary != nil {
+		out.Canary = cloneCanarySpec(overlay.Canary)
+	}
+	if overlay.Benchmark != nil {
+		out.Benchmark = cloneBenchmarkSpec(overlay.Benchmark)
+	}
+	if overlay.Experiment != nil {
+		out.Experiment = cloneExperimentSpec(overlay.Experiment)
+	}
+	if overlay.Snapshot != nil {
+		out.Snapshot = cloneSnapshotSpec(overlay.Snapshot)
+	}
+	if overlay.Sign != nil {
+		out.Sign = cloneSignSpec(overlay.Sign)
+	}
+	if overlay.SBOM != nil {
+		out.SBOM = cloneSBOMSpec(overlay.SBOM)
+	}
+	if overlay.Checkpoint != nil {
+		out.Checkpoint = cloneCheckpointSpec(overlay.Checkpoint)
+	}
+	if overlay.ModelCard != nil {
+		out.ModelCard = cloneModelCardSpec(overlay.ModelCard)
+	}
+	if overlay.Notebook != nil {
+		out.Notebook = cloneNotebookSpec(overlay.Notebook)
+	}
+	if overlay.Export != nil {
+		out.Export = cloneExportSpec(overlay.Export)
+	}
+	if overlay.Offline != nil {
+		out.Offline = cloneOfflineSpec(overlay.Offline)
+	}
 	if overlay.Matrix != nil {
 		out.Matrix = mergeMatrix(out.Matrix, overlay.Matrix)
+	}
+	if overlay.Sweep != nil {
+		out.Sweep = cloneSweepSpec(overlay.Sweep)
 	}
 	if overlay.Docker != nil {
 		out.Docker = cloneDocker(overlay.Docker)

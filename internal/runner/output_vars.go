@@ -15,7 +15,12 @@ func (r *Runner) recordOutputs(taskName string, task *config.Task, vars map[stri
 		values[key] = expandVars(value, vars)
 	}
 	r.outputsMu.Lock()
-	r.outputs[taskName] = values
+	if r.outputs[taskName] == nil {
+		r.outputs[taskName] = map[string]string{}
+	}
+	for key, value := range values {
+		r.outputs[taskName][key] = value
+	}
 	r.outputsMu.Unlock()
 }
 
@@ -33,6 +38,16 @@ func (r *Runner) outputsForDeps(plan *taskPlan, name string) map[string]string {
 		}
 	}
 	return out
+}
+
+func (r *Runner) outputsForTask(name string) map[string]string {
+	r.outputsMu.Lock()
+	defer r.outputsMu.Unlock()
+	values := map[string]string{}
+	for key, value := range r.outputs[name] {
+		values[key] = value
+	}
+	return values
 }
 
 func (r *Runner) outputsMissing(task *config.Task, vars map[string]string) (bool, error) {

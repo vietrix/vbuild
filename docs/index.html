@@ -1,0 +1,856 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>vbuild — Cross-platform build & research runner</title>
+  <meta name="description" content="vbuild is a fast, minimal, cross-platform task runner with DAG scheduling, datasets, experiments, and CI-ready workflows.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="lang-en">
+  <div class="bg-orb orb-1"></div>
+  <div class="bg-orb orb-2"></div>
+  <div class="bg-orb orb-3"></div>
+
+  <header class="hero" id="top">
+    <div class="hero-inner">
+      <div class="brand-row">
+        <div class="brand">
+          <span class="logo">vbuild</span>
+          <span class="badge">v0.0.6</span>
+        </div>
+        <button class="lang-toggle" id="langToggle" aria-pressed="false" aria-label="Toggle language">
+          <span class="lang-inline lang-en">EN</span>
+          <span class="lang-inline lang-vi">VI</span>
+        </button>
+      </div>
+      <h1>
+        <span class="lang lang-en">Scientific build + research workflows, one binary.</span>
+        <span class="lang lang-vi">Workflow build + nghiên cứu theo phong cách khoa học, chỉ một binary.</span>
+      </h1>
+      <p class="hero-lead">
+        <span class="lang lang-en">vbuild executes real shell commands, resolves dependencies as a DAG, and ships AI/Research primitives like datasets, experiments, lineage, and metrics.</span>
+        <span class="lang lang-vi">vbuild chạy lệnh shell thật, giải phụ thuộc theo DAG, và có các primitive AI/Nghiên cứu như dataset, experiment, lineage, metrics.</span>
+      </p>
+      <div class="hero-actions">
+        <a class="btn primary" href="#install"><span class="lang lang-en">Install</span><span class="lang lang-vi">Cài đặt</span></a>
+        <a class="btn ghost" href="#quickstart"><span class="lang lang-en">Quick start</span><span class="lang lang-vi">Bắt đầu nhanh</span></a>
+        <a class="btn ghost" href="#config"><span class="lang lang-en">Config</span><span class="lang lang-vi">Cấu hình</span></a>
+      </div>
+      <div class="hero-snippet">
+        <pre><code>workflow: "Research pipeline"
+
+vars:
+  VERSION: v0.0.6
+
+tasks:
+  default:
+    deps: [data:prep, train, report]
+
+  train:
+    resources: { gpu: 1, memory: 16GB }
+    seed: 1337
+    metrics:
+      regex: ["accuracy=(?P<value>[0-9\\.]+)"]
+    run:
+      - python train.py --seed {{SEED}}
+</code></pre>
+      </div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-inner">
+        <div class="sidebar-title">
+          <span class="lang lang-en">On this page</span>
+          <span class="lang lang-vi">Mục lục</span>
+        </div>
+        <nav class="nav">
+          <a href="#overview"><span class="lang-inline lang-en">Overview</span><span class="lang-inline lang-vi">Tổng quan</span></a>
+          <a href="#quickstart"><span class="lang-inline lang-en">Quick start</span><span class="lang-inline lang-vi">Bắt đầu nhanh</span></a>
+          <a href="#install"><span class="lang-inline lang-en">Install</span><span class="lang-inline lang-vi">Cài đặt</span></a>
+          <a href="#cli"><span class="lang-inline lang-en">CLI</span><span class="lang-inline lang-vi">CLI</span></a>
+          <a href="#config"><span class="lang-inline lang-en">Configuration</span><span class="lang-inline lang-vi">Cấu hình</span></a>
+          <a href="#schema"><span class="lang-inline lang-en">Schema reference</span><span class="lang-inline lang-vi">Tham chiếu schema</span></a>
+          <a href="#vars"><span class="lang-inline lang-en">Vars & env</span><span class="lang-inline lang-vi">Biến & môi trường</span></a>
+          <a href="#dag"><span class="lang-inline lang-en">DAG scheduling</span><span class="lang-inline lang-vi">Lập lịch DAG</span></a>
+          <a href="#cache"><span class="lang-inline lang-en">Cache & artifacts</span><span class="lang-inline lang-vi">Cache & artifact</span></a>
+          <a href="#data"><span class="lang-inline lang-en">Data & research</span><span class="lang-inline lang-vi">Dữ liệu & nghiên cứu</span></a>
+          <a href="#resources"><span class="lang-inline lang-en">Resources & remote</span><span class="lang-inline lang-vi">Tài nguyên & remote</span></a>
+          <a href="#lineage"><span class="lang-inline lang-en">Lineage & reports</span><span class="lang-inline lang-vi">Lineage & báo cáo</span></a>
+          <a href="#update"><span class="lang-inline lang-en">Self-update</span><span class="lang-inline lang-vi">Tự cập nhật</span></a>
+          <a href="#ci"><span class="lang-inline lang-en">CI/CD</span><span class="lang-inline lang-vi">CI/CD</span></a>
+          <a href="#troubleshoot"><span class="lang-inline lang-en">Troubleshooting</span><span class="lang-inline lang-vi">Xử lý lỗi</span></a>
+          <a href="#license"><span class="lang-inline lang-en">License</span><span class="lang-inline lang-vi">Giấy phép</span></a>
+        </nav>
+      </div>
+    </aside>
+
+    <main class="content">
+      <section id="overview" class="section reveal" data-delay="0.05">
+        <div class="lang lang-en">
+          <h2>Overview</h2>
+          <p>vbuild is a cross-platform CLI that turns YAML into deterministic workflows. It is intentionally thin: it delegates the actual work to your shell while it handles dependency resolution, scheduling, environment shaping, caching, and observability.</p>
+          <div class="feature-grid">
+            <div class="feature-card">
+              <h3>DAG execution</h3>
+              <p>Tasks are resolved into a DAG and executed in parallel when safe, with fail-fast and retry policies.</p>
+            </div>
+            <div class="feature-card">
+              <h3>Reproducible runs</h3>
+              <p>Config validation, lock files, cache keys, snapshots, and version injection keep CI and experiments deterministic.</p>
+            </div>
+            <div class="feature-card">
+              <h3>Research primitives</h3>
+              <p>Datasets, experiments, lineage, metrics, model cards, benchmarks, and canary checks are first-class.</p>
+            </div>
+          </div>
+        </div>
+        <div class="lang lang-vi">
+          <h2>Tổng quan</h2>
+          <p>vbuild là CLI đa nền tảng biến YAML thành workflow có thể tái lập. Nó mỏng và nhanh: giao việc thật cho shell, còn vbuild xử lý phụ thuộc, lập lịch, môi trường, cache và quan sát.</p>
+          <div class="feature-grid">
+            <div class="feature-card">
+              <h3>Chạy theo DAG</h3>
+              <p>Task được sắp theo DAG và chạy song song khi an toàn, có fail-fast và retry.</p>
+            </div>
+            <div class="feature-card">
+              <h3>Tái lập kết quả</h3>
+              <p>Validation cấu hình, lock file, cache, snapshot và version injection giúp CI/experiment ổn định.</p>
+            </div>
+            <div class="feature-card">
+              <h3>Primitive nghiên cứu</h3>
+              <p>Dataset, experiment, lineage, metrics, model card, benchmark, canary đều có sẵn.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="quickstart" class="section reveal" data-delay="0.1">
+        <div class="lang lang-en">
+          <h2>Quick start</h2>
+          <ol class="steps">
+            <li>Create a <code>.vbuild.yml</code> in your repo.</li>
+            <li>Run <code>vbuild</code> (default task) or <code>vbuild &lt;task&gt;</code>.</li>
+            <li>Grow the DAG with dependencies, outputs, and cache.</li>
+          </ol>
+          <pre><code>workflow: "Starter"
+
+tasks:
+  default:
+    deps: [fmt, test]
+
+  fmt:
+    run:
+      - gofmt -w .
+
+  test:
+    run:
+      - go test ./...</code></pre>
+        </div>
+        <div class="lang lang-vi">
+          <h2>Bắt đầu nhanh</h2>
+          <ol class="steps">
+            <li>Tạo <code>.vbuild.yml</code> trong repo.</li>
+            <li>Chạy <code>vbuild</code> (task default) hoặc <code>vbuild &lt;task&gt;</code>.</li>
+            <li>Mở rộng DAG bằng deps, outputs và cache.</li>
+          </ol>
+          <pre><code>workflow: "Starter"
+
+tasks:
+  default:
+    deps: [fmt, test]
+
+  fmt:
+    run:
+      - gofmt -w .
+
+  test:
+    run:
+      - go test ./...</code></pre>
+        </div>
+      </section>
+
+      <section id="install" class="section reveal" data-delay="0.15">
+        <div class="lang lang-en">
+          <h2>Install</h2>
+          <div class="callout">
+            Installer scripts are hosted in <code>scripts/</code> on GitHub and download the right release asset.
+          </div>
+          <div class="code-grid">
+            <div>
+              <h3>Linux / macOS</h3>
+              <pre><code>curl -fsSL https://raw.githubusercontent.com/vietrix/vbuild/main/scripts/install.sh | sh
+
+# Pin a version
+VBUILD_VERSION=v0.0.6 curl -fsSL https://raw.githubusercontent.com/vietrix/vbuild/main/scripts/install.sh | sh</code></pre>
+            </div>
+            <div>
+              <h3>Windows (PowerShell)</h3>
+              <pre><code>iwr -useb https://raw.githubusercontent.com/vietrix/vbuild/main/scripts/install.ps1 | iex
+
+# Pin a version
+$env:VBUILD_VERSION = "v0.0.6"; iwr -useb https://raw.githubusercontent.com/vietrix/vbuild/main/scripts/install.ps1 | iex</code></pre>
+            </div>
+          </div>
+        </div>
+        <div class="lang lang-vi">
+          <h2>Cài đặt</h2>
+          <div class="callout">
+            Script cài đặt nằm trong thư mục <code>scripts/</code> trên GitHub và tự chọn đúng binary.
+          </div>
+          <div class="code-grid">
+            <div>
+              <h3>Linux / macOS</h3>
+              <pre><code>curl -fsSL https://raw.githubusercontent.com/vietrix/vbuild/main/scripts/install.sh | sh
+
+# Ghim phiên bản
+VBUILD_VERSION=v0.0.6 curl -fsSL https://raw.githubusercontent.com/vietrix/vbuild/main/scripts/install.sh | sh</code></pre>
+            </div>
+            <div>
+              <h3>Windows (PowerShell)</h3>
+              <pre><code>iwr -useb https://raw.githubusercontent.com/vietrix/vbuild/main/scripts/install.ps1 | iex
+
+# Ghim phiên bản
+$env:VBUILD_VERSION = "v0.0.6"; iwr -useb https://raw.githubusercontent.com/vietrix/vbuild/main/scripts/install.ps1 | iex</code></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="cli" class="section reveal" data-delay="0.2">
+        <div class="lang lang-en">
+          <h2>CLI reference</h2>
+          <div class="cli-grid">
+            <div><code>vbuild</code><span>Run the default task.</span></div>
+            <div><code>vbuild list</code><span>List tasks and descriptions.</span></div>
+            <div><code>vbuild graph --format dot</code><span>Show task graph.</span></div>
+            <div><code>vbuild --dry-run</code><span>Print commands without execution.</span></div>
+            <div><code>vbuild --since 12h</code><span>Run tasks changed since a time.</span></div>
+            <div><code>vbuild --until build</code><span>Run up to a target.</span></div>
+            <div><code>vbuild --reverse cleanup</code><span>Reverse topo order.</span></div>
+            <div><code>vbuild watch dev</code><span>Watch files and rerun.</span></div>
+            <div><code>vbuild dataset list</code><span>Show dataset registry.</span></div>
+            <div><code>vbuild experiment list</code><span>Show experiment registry.</span></div>
+            <div><code>vbuild lineage --format json</code><span>Show lineage graph.</span></div>
+            <div><code>vbuild registry push</code><span>Sync registry.</span></div>
+            <div><code>vbuild report --out report.json</code><span>Generate compliance report.</span></div>
+            <div><code>vbuild update --to v0.0.6</code><span>Self-update binary.</span></div>
+          </div>
+          <p class="muted">Run <code>vbuild help</code> for the full list of commands and flags.</p>
+        </div>
+        <div class="lang lang-vi">
+          <h2>CLI tham khảo</h2>
+          <div class="cli-grid">
+            <div><code>vbuild</code><span>Chạy task mặc định.</span></div>
+            <div><code>vbuild list</code><span>Liệt kê task và mô tả.</span></div>
+            <div><code>vbuild graph --format dot</code><span>Xem đồ thị task.</span></div>
+            <div><code>vbuild --dry-run</code><span>In lệnh, không thực thi.</span></div>
+            <div><code>vbuild --since 12h</code><span>Chạy task thay đổi theo thời gian.</span></div>
+            <div><code>vbuild --until build</code><span>Chạy tới task mục tiêu.</span></div>
+            <div><code>vbuild --reverse cleanup</code><span>Chạy topo ngược.</span></div>
+            <div><code>vbuild watch dev</code><span>Theo dõi file và chạy lại.</span></div>
+            <div><code>vbuild dataset list</code><span>Xem registry dataset.</span></div>
+            <div><code>vbuild experiment list</code><span>Xem registry experiment.</span></div>
+            <div><code>vbuild lineage --format json</code><span>Xem lineage.</span></div>
+            <div><code>vbuild registry push</code><span>Đồng bộ registry.</span></div>
+            <div><code>vbuild report --out report.json</code><span>Tạo báo cáo compliance.</span></div>
+            <div><code>vbuild update --to v0.0.6</code><span>Tự cập nhật binary.</span></div>
+          </div>
+          <p class="muted">Chạy <code>vbuild help</code> để xem đầy đủ lệnh và cờ.</p>
+        </div>
+      </section>
+
+      <section id="config" class="section reveal" data-delay="0.25">
+        <div class="lang lang-en">
+          <h2>Configuration</h2>
+          <p>vbuild reads <code>.vbuild.yml</code> (or <code>--file</code>). The schema is validated with clear errors, and includes defaults, includes, aliases, datasets, and experiments.</p>
+          <pre><code>workflow: "ML pipeline"
+
+defaults:
+  timeout: 45m
+  shell: bash
+  retries: 1
+  max_retries: 3
+  backoff: 5s
+  jitter: 1s
+
+include:
+  - .vbuild.d/**/*.yml
+
+vars:
+  DATA_ROOT: data
+  VERSION: v0.0.6
+
+env:
+  PYTHONUNBUFFERED: "1"
+
+resources:
+  cpu: 8
+  memory: 32GB
+  gpus: 2
+  gpu_devices: ["0", "1"]
+  groups:
+    gpu: 1
+
+datasets:
+  raw:
+    path: data/raw
+    version: 2024-01-01
+    tags: [source]
+
+tasks:
+  data:prep:
+    run:
+      - python scripts/prepare.py --out data/clean
+
+  train:
+    deps: [data:prep]
+    resources: { gpu: 1, memory: 16GB, group: gpu }
+    seed: 1337
+    datasets:
+      - name: raw
+    output:
+      MODEL_PATH: models/model.pt
+    outputs:
+      - models/model.pt
+    run:
+      - python train.py --data {{DATASET_RAW_PATH}} --out {{MODEL_PATH}}</code></pre>
+        </div>
+        <div class="lang lang-vi">
+          <h2>Cấu hình</h2>
+          <p>vbuild đọc <code>.vbuild.yml</code> (hoặc <code>--file</code>). Schema được validate rõ ràng và hỗ trợ defaults, include, alias, dataset, experiment.</p>
+          <pre><code>workflow: "ML pipeline"
+
+defaults:
+  timeout: 45m
+  shell: bash
+  retries: 1
+  max_retries: 3
+  backoff: 5s
+  jitter: 1s
+
+include:
+  - .vbuild.d/**/*.yml
+
+vars:
+  DATA_ROOT: data
+  VERSION: v0.0.6
+
+env:
+  PYTHONUNBUFFERED: "1"
+
+resources:
+  cpu: 8
+  memory: 32GB
+  gpus: 2
+  gpu_devices: ["0", "1"]
+  groups:
+    gpu: 1
+
+datasets:
+  raw:
+    path: data/raw
+    version: 2024-01-01
+    tags: [source]
+
+tasks:
+  data:prep:
+    run:
+      - python scripts/prepare.py --out data/clean
+
+  train:
+    deps: [data:prep]
+    resources: { gpu: 1, memory: 16GB, group: gpu }
+    seed: 1337
+    datasets:
+      - name: raw
+    output:
+      MODEL_PATH: models/model.pt
+    outputs:
+      - models/model.pt
+    run:
+      - python train.py --data {{DATASET_RAW_PATH}} --out {{MODEL_PATH}}</code></pre>
+        </div>
+      </section>
+
+      <section id="schema" class="section reveal" data-delay="0.28">
+        <div class="lang lang-en">
+          <h2>Schema reference</h2>
+          <h3>Global keys</h3>
+          <ul class="bullet">
+            <li><strong>workflow</strong>: display name for the workflow.</li>
+            <li><strong>vars</strong>, <strong>env</strong>, <strong>env_file</strong>: variable and environment sources.</li>
+            <li><strong>defaults</strong>: default timeout/shell/workdir/retries/backoff/jitter.</li>
+            <li><strong>include</strong>: merge additional YAML configs (local, URL, glob).</li>
+            <li><strong>templates</strong> / <strong>tasks</strong>: reusable blocks and task definitions.</li>
+            <li><strong>resources</strong>: global CPU/memory/GPU pools and groups.</li>
+            <li><strong>datasets</strong>: dataset registry definitions.</li>
+            <li><strong>experiments</strong>: experiment defaults and metadata.</li>
+            <li><strong>registry</strong>: registry storage config.</li>
+            <li><strong>seed</strong>, <strong>seed_env</strong>, <strong>offline</strong>, <strong>snapshot</strong>.</li>
+            <li><strong>cache_remote</strong>, <strong>artifacts_upload</strong>, <strong>artifacts_dir</strong>.</li>
+            <li><strong>plugins</strong>, <strong>log_plugins</strong>, <strong>secrets</strong>, <strong>fail_fast</strong>, <strong>timeout</strong>.</li>
+          </ul>
+          <h3>Task keys</h3>
+          <ul class="bullet">
+            <li><strong>run</strong>, <strong>pre</strong>, <strong>post</strong>, <strong>workdir</strong>, <strong>run_dir</strong>, <strong>shell</strong>.</li>
+            <li><strong>deps</strong>, <strong>depends_on</strong>, <strong>parallel</strong>, <strong>fanout</strong>, <strong>matrix</strong>, <strong>sweep</strong>.</li>
+            <li><strong>when</strong>, <strong>only_on</strong>, <strong>confirm</strong>, <strong>allow_failure</strong>, <strong>continue_on_error</strong>.</li>
+            <li><strong>retries</strong>, <strong>max_retries</strong>, <strong>retry_on_exit_codes</strong>, <strong>retry_on_regex</strong>, <strong>retry_on_signal</strong>.</li>
+            <li><strong>inputs</strong>, <strong>outputs</strong>, <strong>output_paths</strong>, <strong>output</strong>, <strong>exports</strong>, <strong>cache</strong>, <strong>if_missing</strong>.</li>
+            <li><strong>capture</strong>, <strong>silent</strong>, <strong>secrets</strong>, <strong>tags</strong>, <strong>watch</strong>, <strong>artifacts</strong>.</li>
+            <li><strong>limits</strong>, <strong>resources</strong>, <strong>priority</strong>, <strong>group</strong>, <strong>remote</strong>, <strong>scheduler</strong>, <strong>isolate</strong>.</li>
+            <li><strong>datasets</strong>, <strong>dataset_outputs</strong>, <strong>split</strong>, <strong>validate</strong>, <strong>stats</strong>.</li>
+            <li><strong>metrics</strong>, <strong>canary</strong>, <strong>benchmark</strong>, <strong>experiment</strong>, <strong>checkpoint</strong>.</li>
+            <li><strong>model_card</strong>, <strong>notebook</strong>, <strong>export</strong>, <strong>sbom</strong>, <strong>sign</strong>, <strong>snapshot</strong>, <strong>offline</strong>.</li>
+            <li><strong>use</strong> / <strong>with</strong> to apply templates and parameters.</li>
+          </ul>
+        </div>
+        <div class="lang lang-vi">
+          <h2>Tham chiếu schema</h2>
+          <h3>Khóa toàn cục</h3>
+          <ul class="bullet">
+            <li><strong>workflow</strong>: tên hiển thị của workflow.</li>
+            <li><strong>vars</strong>, <strong>env</strong>, <strong>env_file</strong>: nguồn biến và môi trường.</li>
+            <li><strong>defaults</strong>: timeout/shell/workdir/retries/backoff/jitter mặc định.</li>
+            <li><strong>include</strong>: ghép thêm YAML (local, URL, glob).</li>
+            <li><strong>templates</strong> / <strong>tasks</strong>: block tái sử dụng và task.</li>
+            <li><strong>resources</strong>: pool CPU/memory/GPU và group.</li>
+            <li><strong>datasets</strong>: khai báo dataset registry.</li>
+            <li><strong>experiments</strong>: mặc định và metadata cho experiment.</li>
+            <li><strong>registry</strong>: cấu hình registry.</li>
+            <li><strong>seed</strong>, <strong>seed_env</strong>, <strong>offline</strong>, <strong>snapshot</strong>.</li>
+            <li><strong>cache_remote</strong>, <strong>artifacts_upload</strong>, <strong>artifacts_dir</strong>.</li>
+            <li><strong>plugins</strong>, <strong>log_plugins</strong>, <strong>secrets</strong>, <strong>fail_fast</strong>, <strong>timeout</strong>.</li>
+          </ul>
+          <h3>Khóa cho task</h3>
+          <ul class="bullet">
+            <li><strong>run</strong>, <strong>pre</strong>, <strong>post</strong>, <strong>workdir</strong>, <strong>run_dir</strong>, <strong>shell</strong>.</li>
+            <li><strong>deps</strong>, <strong>depends_on</strong>, <strong>parallel</strong>, <strong>fanout</strong>, <strong>matrix</strong>, <strong>sweep</strong>.</li>
+            <li><strong>when</strong>, <strong>only_on</strong>, <strong>confirm</strong>, <strong>allow_failure</strong>, <strong>continue_on_error</strong>.</li>
+            <li><strong>retries</strong>, <strong>max_retries</strong>, <strong>retry_on_exit_codes</strong>, <strong>retry_on_regex</strong>, <strong>retry_on_signal</strong>.</li>
+            <li><strong>inputs</strong>, <strong>outputs</strong>, <strong>output_paths</strong>, <strong>output</strong>, <strong>exports</strong>, <strong>cache</strong>, <strong>if_missing</strong>.</li>
+            <li><strong>capture</strong>, <strong>silent</strong>, <strong>secrets</strong>, <strong>tags</strong>, <strong>watch</strong>, <strong>artifacts</strong>.</li>
+            <li><strong>limits</strong>, <strong>resources</strong>, <strong>priority</strong>, <strong>group</strong>, <strong>remote</strong>, <strong>scheduler</strong>, <strong>isolate</strong>.</li>
+            <li><strong>datasets</strong>, <strong>dataset_outputs</strong>, <strong>split</strong>, <strong>validate</strong>, <strong>stats</strong>.</li>
+            <li><strong>metrics</strong>, <strong>canary</strong>, <strong>benchmark</strong>, <strong>experiment</strong>, <strong>checkpoint</strong>.</li>
+            <li><strong>model_card</strong>, <strong>notebook</strong>, <strong>export</strong>, <strong>sbom</strong>, <strong>sign</strong>, <strong>snapshot</strong>, <strong>offline</strong>.</li>
+            <li><strong>use</strong> / <strong>with</strong> để áp dụng template và tham số.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section id="vars" class="section reveal" data-delay="0.3">
+        <div class="lang lang-en">
+          <h2>Variables & environment</h2>
+          <ul class="bullet">
+            <li><strong>vars</strong> expand in commands as <code>{{VAR}}</code>. You can override them with <code>VBUILD_VAR_NAME</code>.</li>
+            <li><strong>env</strong> merges OS env → global env → task env → exports.</li>
+            <li><strong>exports</strong> propagate to downstream tasks.</li>
+            <li><code>--export-env</code> writes the resolved environment to a file.</li>
+            <li><code>--print-vars</code> prints resolved variables for a task.</li>
+          </ul>
+          <pre><code>tasks:
+  build:
+    vars:
+      OUT: bin/app
+    env:
+      GOOS: linux
+    exports:
+      APP_VERSION: "{{VERSION}}"
+    run:
+      - go build -o {{OUT}} ./cmd/app</code></pre>
+        </div>
+        <div class="lang lang-vi">
+          <h2>Biến & môi trường</h2>
+          <ul class="bullet">
+            <li><strong>vars</strong> được thay trong lệnh dưới dạng <code>{{VAR}}</code>. Có thể override bằng <code>VBUILD_VAR_NAME</code>.</li>
+            <li><strong>env</strong> được merge theo thứ tự: OS → global → task → exports.</li>
+            <li><strong>exports</strong> truyền sang task downstream.</li>
+            <li><code>--export-env</code> ghi environment đã resolve ra file.</li>
+            <li><code>--print-vars</code> in các biến đã resolve.</li>
+          </ul>
+          <pre><code>tasks:
+  build:
+    vars:
+      OUT: bin/app
+    env:
+      GOOS: linux
+    exports:
+      APP_VERSION: "{{VERSION}}"
+    run:
+      - go build -o {{OUT}} ./cmd/app</code></pre>
+        </div>
+      </section>
+
+      <section id="dag" class="section reveal" data-delay="0.35">
+        <div class="lang lang-en">
+          <h2>DAG scheduling</h2>
+          <ul class="bullet">
+            <li>Dependencies are resolved with cycle detection.</li>
+            <li>Independent tasks run in parallel across the DAG.</li>
+            <li><code>parallel: true</code> runs commands inside a task concurrently with prefixed logs.</li>
+            <li><code>fanout</code> and <code>matrix</code> expand tasks into multiple DAG nodes.</li>
+            <li><code>fail_fast</code>, <code>continue_on_error</code>, and <code>max-parallel</code> control failure and concurrency.</li>
+            <li>Use <code>--until</code>, <code>--reverse</code>, <code>--since</code>, and <code>only-changed</code> for partial runs.</li>
+          </ul>
+          <pre><code>tasks:
+  lint:
+    run: ["golangci-lint run ./..."]
+
+  test:
+    deps: [lint]
+    matrix:
+      GOOS: [linux, darwin]
+      GOARCH: [amd64, arm64]
+    env:
+      GOOS: "{{GOOS}}"
+      GOARCH: "{{GOARCH}}"
+    run:
+      - go test ./...</code></pre>
+        </div>
+        <div class="lang lang-vi">
+          <h2>Lập lịch DAG</h2>
+          <ul class="bullet">
+            <li>Giải phụ thuộc có phát hiện vòng lặp.</li>
+            <li>Task độc lập chạy song song trên DAG.</li>
+            <li><code>parallel: true</code> chạy lệnh trong task song song và có prefix log.</li>
+            <li><code>fanout</code> và <code>matrix</code> tạo nhiều node trong DAG.</li>
+            <li><code>fail_fast</code>, <code>continue_on_error</code>, <code>max-parallel</code> kiểm soát lỗi và đồng thời.</li>
+            <li>Dùng <code>--until</code>, <code>--reverse</code>, <code>--since</code>, <code>only-changed</code> cho chạy từng phần.</li>
+          </ul>
+          <pre><code>tasks:
+  lint:
+    run: ["golangci-lint run ./..."]
+
+  test:
+    deps: [lint]
+    matrix:
+      GOOS: [linux, darwin]
+      GOARCH: [amd64, arm64]
+    env:
+      GOOS: "{{GOOS}}"
+      GOARCH: "{{GOARCH}}"
+    run:
+      - go test ./...</code></pre>
+        </div>
+      </section>
+
+      <section id="cache" class="section reveal" data-delay="0.4">
+        <div class="lang lang-en">
+          <h2>Cache & artifacts</h2>
+          <ul class="bullet">
+            <li>Use <code>inputs</code>/<code>outputs</code> and <code>cache: mtime|sha256</code> for incremental builds.</li>
+            <li><code>cache_remote</code> supports S3/GCS/MinIO and profile-based auth.</li>
+            <li><code>if_missing</code> skips tasks if outputs already exist.</li>
+            <li><code>artifacts</code> collects outputs into <code>.vbuild/artifacts</code> and <code>artifacts_upload</code> pushes to GitHub or S3.</li>
+          </ul>
+          <pre><code>tasks:
+  build:
+    inputs:
+      - cmd/app/**/*.go
+    outputs:
+      - bin/app
+    cache: sha256
+    artifacts:
+      - bin/app
+    run:
+      - go build -o bin/app ./cmd/app</code></pre>
+        </div>
+        <div class="lang lang-vi">
+          <h2>Cache & artifact</h2>
+          <ul class="bullet">
+            <li>Dùng <code>inputs</code>/<code>outputs</code> và <code>cache: mtime|sha256</code> cho incremental build.</li>
+            <li><code>cache_remote</code> hỗ trợ S3/GCS/MinIO và auth theo profile.</li>
+            <li><code>if_missing</code> bỏ qua task nếu output đã tồn tại.</li>
+            <li><code>artifacts</code> gom output vào <code>.vbuild/artifacts</code> và <code>artifacts_upload</code> đẩy lên GitHub/S3.</li>
+          </ul>
+          <pre><code>tasks:
+  build:
+    inputs:
+      - cmd/app/**/*.go
+    outputs:
+      - bin/app
+    cache: sha256
+    artifacts:
+      - bin/app
+    run:
+      - go build -o bin/app ./cmd/app</code></pre>
+        </div>
+      </section>
+
+      <section id="data" class="section reveal" data-delay="0.45">
+        <div class="lang lang-en">
+          <h2>Data & research workflows</h2>
+          <p>vbuild ships domain features for AI and scientific pipelines: dataset registries, experiment tracking, metrics, benchmarks, checkpoints, model cards, notebooks, and exports.</p>
+          <pre><code>datasets:
+  images:
+    path: data/images
+    version: 2024-01-01
+    format: files
+
+tasks:
+  train:
+    datasets:
+      - name: images
+    dataset_outputs:
+      - name: embeddings
+        path: data/embeddings
+        version: v1
+    split:
+      input: data/images
+      output: data/splits
+      train: 0.8
+      val: 0.1
+      test: 0.1
+    validate:
+      paths: [data/images]
+      min_files: 1000
+      extensions: [".jpg", ".png"]
+    metrics:
+      regex: ["loss=(?P<value>[0-9\\.]+)"]
+      file: metrics.json
+      format: json
+    benchmark:
+      iterations: 5
+      warmup: 1
+    checkpoint:
+      paths: [checkpoints/*.pt]
+      var: CHECKPOINT_PATH
+    model_card:
+      path: .vbuild/model_cards/train.md
+    notebook:
+      path: notebooks/report.ipynb
+      output: notebooks/report.executed.ipynb
+    export:
+      path: dist/train-artifacts.zip
+      format: zip
+    run:
+      - python train.py --data {{DATASET_IMAGES_PATH}} --ckpt {{CHECKPOINT_PATH}}</code></pre>
+          <p class="muted">Use <code>seed</code> and <code>seed_env</code> for deterministic runs, and <code>offline</code> to disable network access for model hubs.</p>
+        </div>
+        <div class="lang lang-vi">
+          <h2>Workflow dữ liệu & nghiên cứu</h2>
+          <p>vbuild có sẵn nhiều tính năng cho AI/Nghiên cứu: registry dataset, theo dõi experiment, metrics, benchmark, checkpoint, model card, notebook và export.</p>
+          <pre><code>datasets:
+  images:
+    path: data/images
+    version: 2024-01-01
+    format: files
+
+tasks:
+  train:
+    datasets:
+      - name: images
+    dataset_outputs:
+      - name: embeddings
+        path: data/embeddings
+        version: v1
+    split:
+      input: data/images
+      output: data/splits
+      train: 0.8
+      val: 0.1
+      test: 0.1
+    validate:
+      paths: [data/images]
+      min_files: 1000
+      extensions: [".jpg", ".png"]
+    metrics:
+      regex: ["loss=(?P<value>[0-9\\.]+)"]
+      file: metrics.json
+      format: json
+    benchmark:
+      iterations: 5
+      warmup: 1
+    checkpoint:
+      paths: [checkpoints/*.pt]
+      var: CHECKPOINT_PATH
+    model_card:
+      path: .vbuild/model_cards/train.md
+    notebook:
+      path: notebooks/report.ipynb
+      output: notebooks/report.executed.ipynb
+    export:
+      path: dist/train-artifacts.zip
+      format: zip
+    run:
+      - python train.py --data {{DATASET_IMAGES_PATH}} --ckpt {{CHECKPOINT_PATH}}</code></pre>
+          <p class="muted">Dùng <code>seed</code> và <code>seed_env</code> để tái lập, <code>offline</code> để tắt network cho model hub.</p>
+        </div>
+      </section>
+
+      <section id="resources" class="section reveal" data-delay="0.5">
+        <div class="lang lang-en">
+          <h2>Resources, scheduling, and remote</h2>
+          <ul class="bullet">
+            <li><code>resources</code> manage CPU, memory, GPUs, and group-based quotas.</li>
+            <li><code>scheduler</code> supports Slurm/PBS wrappers for HPC queues.</li>
+            <li><code>remote</code> runs commands over SSH; <code>remote.hosts</code> fans out to multiple hosts.</li>
+          </ul>
+          <pre><code>tasks:
+  gpu:train:
+    resources: { gpu: 1, memory: 24GB, group: gpu }
+    scheduler:
+      type: slurm
+      queue: gpu
+      gpus: 1
+      time: "02:00:00"
+    remote:
+      hosts: ["gpu01", "gpu02"]
+      user: ml
+    run:
+      - python train.py</code></pre>
+        </div>
+        <div class="lang lang-vi">
+          <h2>Tài nguyên, scheduler, và remote</h2>
+          <ul class="bullet">
+            <li><code>resources</code> quản lý CPU, memory, GPU và quota theo group.</li>
+            <li><code>scheduler</code> hỗ trợ wrapper Slurm/PBS.</li>
+            <li><code>remote</code> chạy lệnh qua SSH; <code>remote.hosts</code> fanout đa host.</li>
+          </ul>
+          <pre><code>tasks:
+  gpu:train:
+    resources: { gpu: 1, memory: 24GB, group: gpu }
+    scheduler:
+      type: slurm
+      queue: gpu
+      gpus: 1
+      time: "02:00:00"
+    remote:
+      hosts: ["gpu01", "gpu02"]
+      user: ml
+    run:
+      - python train.py</code></pre>
+        </div>
+      </section>
+
+      <section id="lineage" class="section reveal" data-delay="0.55">
+        <div class="lang lang-en">
+          <h2>Lineage & compliance reports</h2>
+          <p>Every run can register dataset inputs/outputs, experiments, and lineage edges. Use reports to ship provenance in CI or audits.</p>
+          <pre><code>vbuild dataset list
+vbuild experiment list
+vbuild lineage --format dot
+vbuild report --out compliance.json
+vbuild registry push</code></pre>
+        </div>
+        <div class="lang lang-vi">
+          <h2>Lineage & báo cáo</h2>
+          <p>Mỗi lần chạy có thể ghi nhận dataset inputs/outputs, experiment và lineage. Dùng report cho CI hoặc audit.</p>
+          <pre><code>vbuild dataset list
+vbuild experiment list
+vbuild lineage --format dot
+vbuild report --out compliance.json
+vbuild registry push</code></pre>
+        </div>
+      </section>
+
+      <section id="update" class="section reveal" data-delay="0.6">
+        <div class="lang lang-en">
+          <h2>Self-update</h2>
+          <ul class="bullet">
+            <li><code>vbuild update</code> pulls from GitHub Releases and picks the correct asset.</li>
+            <li>If a <code>.sha256</code> file exists, it verifies the checksum before replacing.</li>
+            <li>Rollback is automatic when verification fails.</li>
+            <li>On Windows, replacement is deferred via a helper script.</li>
+          </ul>
+        </div>
+        <div class="lang lang-vi">
+          <h2>Tự cập nhật</h2>
+          <ul class="bullet">
+            <li><code>vbuild update</code> lấy từ GitHub Releases và chọn đúng asset.</li>
+            <li>Nếu có file <code>.sha256</code>, vbuild sẽ verify trước khi thay thế.</li>
+            <li>Nếu lỗi, tự rollback.</li>
+            <li>Trên Windows, thay thế bằng helper script vì không ghi đè binary đang chạy.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section id="ci" class="section reveal" data-delay="0.65">
+        <div class="lang lang-en">
+          <h2>CI/CD integration</h2>
+          <pre><code>name: build
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.x'
+      - run: curl -fsSL https://raw.githubusercontent.com/vietrix/vbuild/main/scripts/install.sh | sh
+      - run: vbuild test
+      - run: vbuild build</code></pre>
+          <p class="muted">Release builds use <code>-trimpath</code>, <code>-buildvcs=false</code>, and version injection for reproducibility.</p>
+        </div>
+        <div class="lang lang-vi">
+          <h2>Tích hợp CI/CD</h2>
+          <pre><code>name: build
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.x'
+      - run: curl -fsSL https://raw.githubusercontent.com/vietrix/vbuild/main/scripts/install.sh | sh
+      - run: vbuild test
+      - run: vbuild build</code></pre>
+          <p class="muted">Release build dùng <code>-trimpath</code>, <code>-buildvcs=false</code> và version injection để tái lập.</p>
+        </div>
+      </section>
+
+      <section id="troubleshoot" class="section reveal" data-delay="0.7">
+        <div class="lang lang-en">
+          <h2>Troubleshooting</h2>
+          <ul class="bullet">
+            <li>Run <code>vbuild doctor</code> if required binaries are missing.</li>
+            <li>Config errors show full paths to the offending field.</li>
+            <li>Use <code>--json</code> logs for CI parsing and <code>--json-summary</code> for machine output.</li>
+            <li>Check <code>.vbuild/registry</code> and <code>.vbuild/artifacts</code> for persisted data.</li>
+          </ul>
+        </div>
+        <div class="lang lang-vi">
+          <h2>Xử lý lỗi</h2>
+          <ul class="bullet">
+            <li>Chạy <code>vbuild doctor</code> nếu thiếu tool.</li>
+            <li>Lỗi cấu hình hiển thị rõ đường dẫn field bị sai.</li>
+            <li>Dùng <code>--json</code> và <code>--json-summary</code> khi tích hợp CI.</li>
+            <li>Kiểm tra <code>.vbuild/registry</code> và <code>.vbuild/artifacts</code> để xem dữ liệu đã lưu.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section id="license" class="section reveal" data-delay="0.75">
+        <div class="lang lang-en">
+          <h2>License</h2>
+          <p>vbuild uses a dual-license model: Apache-2.0 for open-source and non-commercial use, plus a separate commercial license for paid products, SaaS, CI/CD services, or redistribution. See <code>LICENSE</code> and <code>LICENSE-COMMERCIAL</code>.</p>
+        </div>
+        <div class="lang lang-vi">
+          <h2>Giấy phép</h2>
+          <p>vbuild dùng mô hình dual-license: Apache-2.0 cho mã nguồn mở và phi thương mại, kèm giấy phép thương mại riêng cho sản phẩm trả phí, SaaS, CI/CD dịch vụ hoặc phân phối lại. Xem <code>LICENSE</code> và <code>LICENSE-COMMERCIAL</code>.</p>
+        </div>
+      </section>
+
+      <footer class="footer">
+        <span class="lang lang-en">vbuild is designed for production workflows, research labs, and CI systems.</span>
+        <span class="lang lang-vi">vbuild tối ưu cho workflow production, phòng thí nghiệm và hệ thống CI.</span>
+      </footer>
+    </main>
+  </div>
+
+  <script src="app.js" defer></script>
+</body>
+</html>
+

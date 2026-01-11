@@ -17,7 +17,6 @@ jobs:
       - run: mkdir -p bin
       - run: go build -o ./bin/vbuild ./cmd/vbuild
       - run: VBUILD_VAR_VERSION=${{ github.ref_name }} ./bin/vbuild test
-      - run: chmod +x scripts/release.sh
       - run: VBUILD_VAR_VERSION=${{ github.ref_name }} ./bin/vbuild release
       - uses: softprops/action-gh-release@v2
         with:

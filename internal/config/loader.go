@@ -172,6 +172,14 @@ func mergeConfigs(base, overlay *Config) *Config {
 		out.EnvFile = base.EnvFile
 		out.ArtifactsDir = base.ArtifactsDir
 		out.Timeout = base.Timeout
+		out.Seed = base.Seed
+		out.SeedEnv = mergeStringMap(out.SeedEnv, base.SeedEnv)
+		out.Offline = cloneOfflineSpec(base.Offline)
+		out.Resources = cloneResourcePool(base.Resources)
+		out.Datasets = mergeDatasetMap(out.Datasets, base.Datasets)
+		out.Experiments = mergeExperimentDefaults(out.Experiments, base.Experiments)
+		out.Registry = cloneRegistrySpec(base.Registry)
+		out.Snapshot = cloneSnapshotSpec(base.Snapshot)
 		out.Defaults = mergeDefaults(out.Defaults, base.Defaults)
 		out.FailFast = base.FailFast
 		out.CacheRemote = base.CacheRemote
@@ -197,6 +205,26 @@ func mergeConfigs(base, overlay *Config) *Config {
 		}
 		if overlay.Timeout != "" {
 			out.Timeout = overlay.Timeout
+		}
+		if overlay.Seed != 0 {
+			out.Seed = overlay.Seed
+		}
+		out.SeedEnv = mergeStringMap(out.SeedEnv, overlay.SeedEnv)
+		if overlay.Offline != nil {
+			out.Offline = mergeOfflineSpec(out.Offline, overlay.Offline)
+		}
+		if overlay.Resources != nil {
+			out.Resources = mergeResourcePool(out.Resources, overlay.Resources)
+		}
+		if overlay.Datasets != nil {
+			out.Datasets = mergeDatasetMap(out.Datasets, overlay.Datasets)
+		}
+		out.Experiments = mergeExperimentDefaults(out.Experiments, overlay.Experiments)
+		if overlay.Registry != nil {
+			out.Registry = cloneRegistrySpec(overlay.Registry)
+		}
+		if overlay.Snapshot != nil {
+			out.Snapshot = cloneSnapshotSpec(overlay.Snapshot)
 		}
 		out.Defaults = mergeDefaults(out.Defaults, overlay.Defaults)
 		if overlay.FailFast {
@@ -286,6 +314,10 @@ func cloneTask(task *Task) *Task {
 	out.IfMissing = task.IfMissing
 	out.MaxRetries = task.MaxRetries
 	out.Jitter = task.Jitter
+	out.Priority = task.Priority
+	out.Group = task.Group
+	out.RunDir = task.RunDir
+	out.Seed = task.Seed
 	if task.Env != nil {
 		out.Env = map[string]string{}
 		for k, v := range task.Env {
@@ -296,6 +328,12 @@ func cloneTask(task *Task) *Task {
 		out.Vars = map[string]string{}
 		for k, v := range task.Vars {
 			out.Vars[k] = v
+		}
+	}
+	if task.SeedEnv != nil {
+		out.SeedEnv = map[string]string{}
+		for k, v := range task.SeedEnv {
+			out.SeedEnv[k] = v
 		}
 	}
 	if task.Exports != nil {
@@ -322,13 +360,82 @@ func cloneTask(task *Task) *Task {
 			out.Matrix[k] = append([]string(nil), v...)
 		}
 	}
+	if task.Sweep != nil {
+		out.Sweep = cloneSweepSpec(task.Sweep)
+	}
 	if task.Limits != nil {
 		limits := *task.Limits
 		out.Limits = &limits
 	}
+	if task.Resources != nil {
+		res := *task.Resources
+		out.Resources = &res
+	}
 	if task.Remote != nil {
 		remote := *task.Remote
+		remote.Hosts = append([]string(nil), task.Remote.Hosts...)
+		if task.Remote.Scheduler != nil {
+			scheduler := *task.Remote.Scheduler
+			scheduler.Args = append([]string(nil), task.Remote.Scheduler.Args...)
+			remote.Scheduler = &scheduler
+		}
 		out.Remote = &remote
+	}
+	if task.Scheduler != nil {
+		scheduler := *task.Scheduler
+		scheduler.Args = append([]string(nil), task.Scheduler.Args...)
+		out.Scheduler = &scheduler
+	}
+	if len(task.Datasets) > 0 {
+		out.Datasets = append([]DatasetRef(nil), task.Datasets...)
+	}
+	if len(task.DatasetOutputs) > 0 {
+		out.DatasetOutputs = append([]DatasetOutput(nil), task.DatasetOutputs...)
+	}
+	if task.Split != nil {
+		out.Split = cloneSplitSpec(task.Split)
+	}
+	if task.Validate != nil {
+		out.Validate = cloneValidateSpec(task.Validate)
+	}
+	if task.Stats != nil {
+		out.Stats = cloneStatsSpec(task.Stats)
+	}
+	if task.Metrics != nil {
+		out.Metrics = cloneMetricsSpec(task.Metrics)
+	}
+	if task.Canary != nil {
+		out.Canary = cloneCanarySpec(task.Canary)
+	}
+	if task.Benchmark != nil {
+		out.Benchmark = cloneBenchmarkSpec(task.Benchmark)
+	}
+	if task.Experiment != nil {
+		out.Experiment = cloneExperimentSpec(task.Experiment)
+	}
+	if task.Snapshot != nil {
+		out.Snapshot = cloneSnapshotSpec(task.Snapshot)
+	}
+	if task.Sign != nil {
+		out.Sign = cloneSignSpec(task.Sign)
+	}
+	if task.SBOM != nil {
+		out.SBOM = cloneSBOMSpec(task.SBOM)
+	}
+	if task.Checkpoint != nil {
+		out.Checkpoint = cloneCheckpointSpec(task.Checkpoint)
+	}
+	if task.ModelCard != nil {
+		out.ModelCard = cloneModelCardSpec(task.ModelCard)
+	}
+	if task.Notebook != nil {
+		out.Notebook = cloneNotebookSpec(task.Notebook)
+	}
+	if task.Export != nil {
+		out.Export = cloneExportSpec(task.Export)
+	}
+	if task.Offline != nil {
+		out.Offline = cloneOfflineSpec(task.Offline)
 	}
 	if task.Docker != nil {
 		out.Docker = cloneDocker(task.Docker)

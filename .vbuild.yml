@@ -1,8 +1,8 @@
-workflow: "vbuild public"
+﻿workflow: "vbuild public"
 
 vars:
   APP: vbuild
-  VERSION: v0.0.5
+  VERSION: v0.0.6
 
 env:
   CGO_ENABLED: "0"
@@ -144,3 +144,4 @@ tasks:
         $out = Join-Path $distDir "windows-amd64-$version.exe"
         go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=$version" -o $out ./cmd/vbuild
         Write-Checksum $out "windows-amd64-$version.exe"
+

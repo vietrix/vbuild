@@ -24,12 +24,14 @@ type Runner struct {
 	exports    map[string]string
 	outputsMu  sync.Mutex
 	outputs    map[string]map[string]string
+	registryMu sync.Mutex
 	trace      *traceRecorder
 	remote     remoteCache
 	logPlugins []logPlugin
 	gitVars    map[string]string
 	randMu     sync.Mutex
 	rand       *rand.Rand
+	resources  *resourceManager
 }
 
 func New(cfg *config.Config, opts Options, stdout, stderr io.Writer) *Runner {
@@ -55,6 +57,7 @@ func New(cfg *config.Config, opts Options, stdout, stderr io.Writer) *Runner {
 	r.trace = newTraceRecorder(root, opts.TimelinePath)
 	r.remote = newRemoteCache(cfg.CacheRemote, root, log)
 	r.logPlugins = r.startLogPlugins(cfg.LogPlugins)
+	r.resources = newResourceManager(cfg.Resources, root, log)
 	return r
 }
 

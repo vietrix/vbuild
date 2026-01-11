@@ -172,6 +172,16 @@ func run(args []string, stdout, stderr io.Writer) int {
 			return runDoctor(cfg, stdout, stderr)
 		case "clean":
 			return runClean(cfg, opts, stdout, stderr)
+		case "dataset":
+			return runDataset(rest[1:], cfg, opts, stdout, stderr)
+		case "experiment":
+			return runExperiment(rest[1:], cfg, opts, stdout, stderr)
+		case "lineage":
+			return runLineage(rest[1:], cfg, opts, stdout, stderr)
+		case "registry":
+			return runRegistry(rest[1:], cfg, opts, stdout, stderr)
+		case "report":
+			return runReport(rest[1:], cfg, opts, stdout, stderr)
 		case "shell":
 			return runShell(rest[1:], cfg, opts, stdout, stderr)
 		case "inspect":

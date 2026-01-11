@@ -2,8 +2,10 @@ package runner
 
 import (
 	"fmt"
+	"math/rand"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/vietrix/vbuild/internal/config"
 )
@@ -79,6 +81,9 @@ func (r *Runner) buildPlan(targets []string) (*taskPlan, error) {
 
 	variants := map[string]taskVariant{}
 	if err := expandMatrix(tasks, deps, variants); err != nil {
+		return nil, err
+	}
+	if err := expandSweep(tasks, deps, variants, r.cfg.Seed); err != nil {
 		return nil, err
 	}
 	if err := r.applyConditionalDeps(tasks, deps, variants); err != nil {
@@ -219,6 +224,93 @@ func expandMatrix(tasks map[string]*config.Task, deps map[string][]string, varia
 		deps[name] = append([]string(nil), variantNames...)
 	}
 	return nil
+}
+
+func expandSweep(tasks map[string]*config.Task, deps map[string][]string, variants map[string]taskVariant, seed int64) error {
+	for name, task := range tasks {
+		if task == nil || task.Sweep == nil {
+			continue
+		}
+		spec := task.Sweep
+		combos := []map[string]string{}
+		if len(spec.Grid) > 0 {
+			combos = append(combos, matrixCombos(spec.Grid)...)
+		}
+		if len(spec.Sample) > 0 && spec.Samples > 0 {
+			sampleCombos := sampleCombos(spec.Sample, spec.Samples, spec.Seed, seed)
+			combos = append(combos, sampleCombos...)
+		}
+		if len(combos) == 0 {
+			continue
+		}
+		origDeps := append([]string(nil), deps[name]...)
+		variantNames := make([]string, 0, len(combos))
+		for _, combo := range combos {
+			variantName := formatVariantName(name, combo)
+			if _, exists := tasks[variantName]; exists {
+				return fmt.Errorf("sweep variant name collision: %s", variantName)
+			}
+			variant := cloneTask(task)
+			variant.Sweep = nil
+			if variant.Vars == nil {
+				variant.Vars = map[string]string{}
+			}
+			if variant.Env == nil {
+				variant.Env = map[string]string{}
+			}
+			for key, value := range combo {
+				variant.Vars[key] = value
+				if _, ok := variant.Env[key]; !ok {
+					variant.Env[key] = value
+				}
+			}
+			tasks[variantName] = variant
+			deps[variantName] = append([]string(nil), origDeps...)
+			variants[variantName] = taskVariant{base: name, vars: combo}
+			variantNames = append(variantNames, variantName)
+		}
+		agg := cloneTask(task)
+		agg.Run = nil
+		agg.Pre = nil
+		agg.Post = nil
+		agg.Sweep = nil
+		agg.Deps = append([]string(nil), variantNames...)
+		tasks[name] = agg
+		deps[name] = append([]string(nil), variantNames...)
+	}
+	return nil
+}
+
+func sampleCombos(sample map[string][]string, count int, specSeed, defaultSeed int64) []map[string]string {
+	if len(sample) == 0 || count <= 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(sample))
+	for key := range sample {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	seed := specSeed
+	if seed == 0 {
+		seed = defaultSeed
+	}
+	if seed == 0 {
+		seed = time.Now().UnixNano()
+	}
+	rng := rand.New(rand.NewSource(seed))
+	combos := []map[string]string{}
+	for i := 0; i < count; i++ {
+		combo := map[string]string{}
+		for _, key := range keys {
+			values := sample[key]
+			if len(values) == 0 {
+				continue
+			}
+			combo[key] = values[rng.Intn(len(values))]
+		}
+		combos = append(combos, combo)
+	}
+	return combos
 }
 
 func expandFanout(tasks map[string]*config.Task, deps map[string][]string, variants map[string]taskVariant) error {

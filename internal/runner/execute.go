@@ -51,8 +51,10 @@ type commandOptions struct {
 	retrySignals []string
 	limits       *config.ResourceLimits
 	remote       *config.RemoteSpec
+	scheduler    *config.SchedulerSpec
 	silent       bool
 	capture      *captureSpec
+	metrics      *metricsCollector
 }
 
 func (r *Runner) printDryRun(plan *taskPlan) {
@@ -258,8 +260,21 @@ func (r *Runner) runTask(ctx context.Context, plan *taskPlan, name string, task 
 	}
 
 	vars := r.taskVars(plan, name, task)
+	if task.RunDir != "" {
+		runDir := expandVars(task.RunDir, vars)
+		if runDir != "" {
+			runDir = r.resolvePath(runDir)
+			if err := os.MkdirAll(runDir, 0o755); err != nil {
+				endTrace(statusFailed, time.Since(start))
+				return taskResult{name: name, status: statusFailed, err: err}
+			}
+			vars["RUN_DIR"] = runDir
+		}
+	}
 	envMap := r.taskEnv(vars, task)
-	env := envMapToList(envMap)
+	seed := r.applySeed(vars, envMap, task)
+	r.applyOffline(envMap, task)
+	var datasetInputs []datasetEntry
 
 	if task.When != "" {
 		ok, err := evalCondition(task.When, vars, envMap)
@@ -279,6 +294,17 @@ func (r *Runner) runTask(ctx context.Context, plan *taskPlan, name string, task 
 			endTrace(statusSkipped, time.Since(start))
 			return taskResult{name: name, status: statusSkipped, reason: "only_on"}
 		}
+	}
+
+	datasetEnv, inputs, err := r.resolveDatasetRefs(task, vars)
+	if err != nil {
+		endTrace(statusFailed, time.Since(start))
+		return taskResult{name: name, status: statusFailed, err: err}
+	}
+	datasetInputs = inputs
+	for key, value := range datasetEnv {
+		envMap[key] = value
+		vars[key] = value
 	}
 
 	if err := ctx.Err(); err != nil {
@@ -321,6 +347,30 @@ func (r *Runner) runTask(ctx context.Context, plan *taskPlan, name string, task 
 		return taskResult{name: name, status: statusFailed, err: err}
 	}
 
+	var lease *resourceLease
+	if task.Resources != nil || task.Group != "" {
+		group := task.Group
+		if task.Resources != nil && task.Resources.Group != "" {
+			group = task.Resources.Group
+		}
+		var err error
+		lease, err = r.acquireResources(ctx, task, group)
+		if err != nil {
+			endTrace(statusFailed, time.Since(start))
+			return taskResult{name: name, status: statusFailed, err: err}
+		}
+		if lease != nil {
+			defer lease.release()
+			for key, value := range lease.env {
+				envMap[key] = value
+				vars[key] = value
+			}
+		}
+	}
+
+	env := envMapToList(envMap)
+	experimentRun := r.startExperiment(name, task, vars, envMap, seed, vars["RUN_DIR"])
+
 	r.log.Printf("==> %s\n", name)
 
 	if err := r.runPlugins(ctx, "task_start", name, "running", 0); err != nil {
@@ -329,16 +379,33 @@ func (r *Runner) runTask(ctx context.Context, plan *taskPlan, name string, task 
 	}
 
 	commands := r.taskCommands(task, vars)
-	if len(commands) == 0 && len(task.Pre) == 0 && len(task.Post) == 0 {
+	if task.Benchmark != nil && len(commands) == 0 {
+		runErr := fmt.Errorf("task %s benchmark requires run commands", name)
+		_ = r.runPlugins(ctx, "task_end", name, "failed", time.Since(start))
+		endTrace(statusFailed, time.Since(start))
+		return taskResult{name: name, duration: time.Since(start), status: statusFailed, err: runErr}
+	}
+	var benchResult *benchmarkResult
+	if !taskHasWork(task, commands) {
 		duration := time.Since(start)
 		r.recordOutputs(name, task, vars)
 		r.log.Printf("==> %s completed in %s\n", name, formatDuration(duration))
 		_ = r.runPlugins(ctx, "task_end", name, "ok", duration)
 		endTrace(statusOK, duration)
+		expID := ""
+		if experimentRun != nil {
+			expID = experimentRun.record.ID
+			_ = r.finishExperiment(experimentRun, "ok", duration, datasetInputs, r.outputsForTask(name), nil, benchResult)
+		}
+		_ = r.recordLineage(name, datasetInputs, nil, expID)
 		return taskResult{name: name, duration: duration, status: statusOK}
 	}
 
 	prefixed := plan.prefixOutput || task.Parallel
+	notebookPrefix := ""
+	if prefixed {
+		notebookPrefix = fmt.Sprintf("[%s] ", name)
+	}
 	retries := effectiveRetries(task, r.cfg)
 	backoff := parseDuration(task.Backoff)
 	jitter := parseDuration(task.Jitter)
@@ -360,6 +427,11 @@ func (r *Runner) runTask(ctx context.Context, plan *taskPlan, name string, task 
 	}
 
 	workdir := expandVars(task.Workdir, vars)
+	if workdir == "" {
+		if runDir, ok := vars["RUN_DIR"]; ok {
+			workdir = runDir
+		}
+	}
 	if workdir == "" && r.cfg != nil && r.cfg.Defaults != nil {
 		workdir = expandVars(r.cfg.Defaults.Workdir, vars)
 	}
@@ -404,6 +476,22 @@ func (r *Runner) runTask(ctx context.Context, plan *taskPlan, name string, task 
 		defer captureSpec.Close()
 	}
 
+	metricsCollector, err := newMetricsCollector(task.Metrics)
+	if err != nil {
+		_ = r.runPlugins(ctx, "task_end", name, "failed", time.Since(start))
+		endTrace(statusFailed, time.Since(start))
+		return taskResult{name: name, duration: time.Since(start), status: statusFailed, err: err}
+	}
+	scheduler := task.Scheduler
+	if scheduler == nil && task.Remote != nil && task.Remote.Scheduler != nil {
+		scheduler = task.Remote.Scheduler
+	}
+	remote := task.Remote
+	if remote != nil && remote.Host == "" && len(remote.Hosts) > 0 {
+		remote = cloneRemote(remote)
+		remote.Host = remote.Hosts[0]
+	}
+
 	cmdOpts := commandOptions{
 		env:          env,
 		vars:         vars,
@@ -419,21 +507,44 @@ func (r *Runner) runTask(ctx context.Context, plan *taskPlan, name string, task 
 		retryRegex:   task.RetryOnRegex,
 		retrySignals: task.RetryOnSignal,
 		limits:       task.Limits,
-		remote:       task.Remote,
+		remote:       remote,
+		scheduler:    scheduler,
 		silent:       task.Silent,
 		capture:      captureSpec,
+		metrics:      metricsCollector,
 	}
 
 	runErr := r.runCommands(ctx, name, task.Pre, cmdOpts, false)
 	if runErr == nil {
-		if task.Parallel {
-			runErr = r.runParallel(ctx, name, commands, cmdOpts)
-		} else {
-			runErr = r.runSequential(ctx, name, commands, cmdOpts)
+		runErr = r.runSplit(name, task, vars, seed)
+	}
+	if runErr == nil {
+		runErr = r.validateData(task, vars)
+	}
+	if runErr == nil {
+		if len(commands) > 0 {
+			if task.Benchmark != nil {
+				benchResult, runErr = r.runBenchmark(ctx, name, commands, cmdOpts, task)
+				if benchResult != nil {
+					vars["BENCHMARK_P50"] = benchResult.P50
+					vars["BENCHMARK_P95"] = benchResult.P95
+				}
+			} else if task.Remote != nil && len(task.Remote.Hosts) > 0 {
+				runErr = r.runRemoteFanout(ctx, name, commands, cmdOpts, task)
+			} else if task.Parallel {
+				runErr = r.runParallel(ctx, name, commands, cmdOpts)
+			} else {
+				runErr = r.runSequential(ctx, name, commands, cmdOpts)
+			}
+		} else if task.Notebook != nil {
+			runErr = r.runNotebook(ctx, name, task, vars, cmdOpts, notebookPrefix)
 		}
 	}
 	if runErr == nil {
 		runErr = r.runCommands(ctx, name, task.Post, cmdOpts, true)
+	}
+	if runErr == nil && task.Notebook != nil && len(commands) > 0 {
+		runErr = r.runNotebook(ctx, name, task, vars, cmdOpts, notebookPrefix)
 	}
 
 	duration := time.Since(start)
@@ -442,11 +553,17 @@ func (r *Runner) runTask(ctx context.Context, plan *taskPlan, name string, task 
 			r.log.Printf("==> %s failed (allowed) in %s\n", name, formatDuration(duration))
 			_ = r.runPlugins(ctx, "task_end", name, "allowed_failure", duration)
 			endTrace(statusOK, duration)
+			if experimentRun != nil {
+				_ = r.finishExperiment(experimentRun, "allowed_failure", duration, datasetInputs, nil, nil, benchResult)
+			}
 			return taskResult{name: name, duration: duration, status: statusOK, reason: "allowed failure"}
 		}
 		r.log.Errorf("==> %s failed in %s\n", name, formatDuration(duration))
 		_ = r.runPlugins(ctx, "task_end", name, "failed", duration)
 		endTrace(statusFailed, duration)
+		if experimentRun != nil {
+			_ = r.finishExperiment(experimentRun, "failed", duration, datasetInputs, nil, nil, benchResult)
+		}
 		return taskResult{name: name, duration: duration, status: statusFailed, err: runErr}
 	}
 
@@ -457,6 +574,98 @@ func (r *Runner) runTask(ctx context.Context, plan *taskPlan, name string, task 
 			endTrace(statusFailed, duration)
 			return taskResult{name: name, duration: duration, status: statusFailed, err: err}
 		}
+	}
+
+	metrics, err := r.finalizeMetrics(task, vars, metricsCollector)
+	if err != nil {
+		r.log.Errorf("==> %s metrics failed: %v\n", name, err)
+		_ = r.runPlugins(ctx, "task_end", name, "failed", duration)
+		endTrace(statusFailed, duration)
+		return taskResult{name: name, duration: duration, status: statusFailed, err: err}
+	}
+	for key, value := range metrics {
+		vars["METRIC_"+strings.ToUpper(sanitizeEnvKey(key))] = fmt.Sprintf("%v", value)
+	}
+
+	if err := r.writeStats(name, task, vars); err != nil {
+		r.log.Errorf("==> %s stats failed: %v\n", name, err)
+		_ = r.runPlugins(ctx, "task_end", name, "failed", duration)
+		endTrace(statusFailed, duration)
+		return taskResult{name: name, duration: duration, status: statusFailed, err: err}
+	}
+
+	if task.Canary != nil {
+		if err := r.evaluateCanary(task.Canary, metrics); err != nil {
+			r.log.Errorf("==> %s canary failed: %v\n", name, err)
+			_ = r.runPlugins(ctx, "task_end", name, "failed", duration)
+			endTrace(statusFailed, duration)
+			return taskResult{name: name, duration: duration, status: statusFailed, err: err}
+		}
+	}
+
+	checkpointPath, err := r.recordCheckpoint(name, task, vars)
+	if err != nil {
+		r.log.Errorf("==> %s checkpoint failed: %v\n", name, err)
+		_ = r.runPlugins(ctx, "task_end", name, "failed", duration)
+		endTrace(statusFailed, duration)
+		return taskResult{name: name, duration: duration, status: statusFailed, err: err}
+	}
+	if checkpointPath != "" {
+		vars["CHECKPOINT_PATH"] = checkpointPath
+	}
+
+	datasetOutputs, err := r.registerDatasetOutputs(name, task, vars)
+	if err != nil {
+		r.log.Errorf("==> %s dataset outputs failed: %v\n", name, err)
+		_ = r.runPlugins(ctx, "task_end", name, "failed", duration)
+		endTrace(statusFailed, duration)
+		return taskResult{name: name, duration: duration, status: statusFailed, err: err}
+	}
+	for _, entry := range datasetOutputs {
+		prefix := "DATASET_" + strings.ToUpper(sanitizeEnvKey(entry.Name))
+		if entry.Path != "" {
+			vars[prefix+"_PATH"] = entry.Path
+		}
+		vars[prefix+"_VERSION"] = entry.Version
+	}
+
+	exportPath, exportFiles, err := r.exportArtifacts(name, task, vars)
+	if err != nil {
+		r.log.Errorf("==> %s export failed: %v\n", name, err)
+		_ = r.runPlugins(ctx, "task_end", name, "failed", duration)
+		endTrace(statusFailed, duration)
+		return taskResult{name: name, duration: duration, status: statusFailed, err: err}
+	}
+	if exportPath != "" {
+		vars["EXPORT_PATH"] = exportPath
+	}
+
+	if _, err := r.writeSBOM(task, vars, exportFiles); err != nil {
+		r.log.Errorf("==> %s sbom failed: %v\n", name, err)
+		_ = r.runPlugins(ctx, "task_end", name, "failed", duration)
+		endTrace(statusFailed, duration)
+		return taskResult{name: name, duration: duration, status: statusFailed, err: err}
+	}
+
+	if _, err := r.writeSignature(task, vars, exportFiles, envMap); err != nil {
+		r.log.Errorf("==> %s signature failed: %v\n", name, err)
+		_ = r.runPlugins(ctx, "task_end", name, "failed", duration)
+		endTrace(statusFailed, duration)
+		return taskResult{name: name, duration: duration, status: statusFailed, err: err}
+	}
+
+	if err := r.writeModelCard(name, task, vars, metrics, append(datasetInputs, datasetOutputs...)); err != nil {
+		r.log.Errorf("==> %s model card failed: %v\n", name, err)
+		_ = r.runPlugins(ctx, "task_end", name, "failed", duration)
+		endTrace(statusFailed, duration)
+		return taskResult{name: name, duration: duration, status: statusFailed, err: err}
+	}
+
+	if err := r.writeSnapshot(name, task, vars, envMap); err != nil {
+		r.log.Errorf("==> %s snapshot failed: %v\n", name, err)
+		_ = r.runPlugins(ctx, "task_end", name, "failed", duration)
+		endTrace(statusFailed, duration)
+		return taskResult{name: name, duration: duration, status: statusFailed, err: err}
 	}
 
 	artifacts, err := r.collectArtifacts(name, task, vars)
@@ -486,6 +695,17 @@ func (r *Runner) runTask(ctx context.Context, plan *taskPlan, name string, task 
 	r.log.Printf("==> %s completed in %s\n", name, formatDuration(duration))
 	_ = r.runPlugins(ctx, "task_end", name, "ok", duration)
 	endTrace(statusOK, duration)
+	outputVars := r.outputsForTask(name)
+	expID := ""
+	if experimentRun != nil {
+		expID = experimentRun.record.ID
+		status := "ok"
+		if runErr != nil {
+			status = "failed"
+		}
+		_ = r.finishExperiment(experimentRun, status, duration, append(datasetInputs, datasetOutputs...), outputVars, metrics, benchResult)
+	}
+	_ = r.recordLineage(name, datasetInputs, datasetOutputs, expID)
 	return taskResult{name: name, duration: duration, status: statusOK}
 }
 
@@ -667,6 +887,10 @@ func (r *Runner) runCommandWithRetry(ctx context.Context, taskName string, comma
 		}
 		r.trace.CommandEnd(taskName, command, status, time.Since(start), attempt)
 
+		if err == nil && opts.metrics != nil && capture != nil {
+			opts.metrics.consume(capture.String())
+		}
+
 		if err == nil {
 			return nil
 		}
@@ -697,6 +921,16 @@ func (r *Runner) runCommandWithRetry(ctx context.Context, taskName string, comma
 
 func (r *Runner) runCommand(ctx context.Context, taskName string, command string, prefix string, opts commandOptions, capture *outputCapture) error {
 	cmdText := applyLimits(command, opts.limits, opts.shell, opts.remote != nil)
+	cleanup := func() {}
+	if opts.scheduler != nil {
+		updated, finish, err := r.prepareSchedulerCommand(cmdText, opts.scheduler, opts.shell)
+		if err != nil {
+			return err
+		}
+		cmdText = updated
+		cleanup = finish
+	}
+	defer cleanup()
 	var cmd *exec.Cmd
 	if opts.remote != nil {
 		cmd = r.sshCommand(ctx, opts.remote, cmdText, opts.env, opts.workdir, opts.shell)

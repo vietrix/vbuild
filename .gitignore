@@ -5,6 +5,14 @@
 /.vbuild/cache/
 /.vbuild/artifacts/
 /.vbuild/sandbox/
+/.vbuild/registry/
+/.vbuild/experiments/
+/.vbuild/stats/
+/.vbuild/snapshots/
+/.vbuild/model_cards/
+/.vbuild/sbom/
+/.vbuild/signatures/
+/.vbuild/tmp/
 /.vbuild/daemon.json
 /.vbuild/daemon.log
 
