@@ -512,7 +512,7 @@ func prepareTargets(cfg *config.Config, rest []string) ([]string, []string, stri
 		}
 		if len(resolved) == 1 {
 			task := cfg.Tasks[resolved[0]]
-			if task != nil && task.PassArgs {
+			if taskAllowsArgs(task) {
 				argsTarget = resolved[0]
 			}
 		}
@@ -534,7 +534,7 @@ func parseTargetsAndArgs(cfg *config.Config, rest []string) ([]string, []string,
 			return nil, nil, "", err
 		}
 		task := cfg.Tasks[resolved]
-		if task == nil || !task.PassArgs {
+		if !taskAllowsArgs(task) {
 			return nil, nil, "", argsNotAllowedError(resolved)
 		}
 		return targets, passArgs, resolved, nil
@@ -546,7 +546,7 @@ func parseTargetsAndArgs(cfg *config.Config, rest []string) ([]string, []string,
 		}
 		if len(resolved) == 1 {
 			task := cfg.Tasks[resolved[0]]
-			if task != nil && task.PassArgs {
+			if taskAllowsArgs(task) {
 				if isFlagLike(rest[1]) || !isResolvableTask(cfg, rest[1]) {
 					return []string{rest[0]}, rest[1:], resolved[0], nil
 				}
@@ -581,4 +581,11 @@ func isFlagLike(value string) bool {
 
 func argsNotAllowedError(task string) error {
 	return fmt.Errorf("task %s does not accept args (set pass_args: true)", task)
+}
+
+func taskAllowsArgs(task *config.Task) bool {
+	if task == nil {
+		return false
+	}
+	return task.PassArgs || strings.TrimSpace(task.Script) != ""
 }

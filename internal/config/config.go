@@ -56,6 +56,7 @@ type Task struct {
 	Deps             []string            `yaml:"deps"`
 	Needs            []string            `yaml:"needs"`
 	DependsOn        []ConditionalDep    `yaml:"depends_on"`
+	Script           string              `yaml:"script"`
 	Run              []string            `yaml:"run"`
 	Pre              []string            `yaml:"pre"`
 	Post             []string            `yaml:"post"`
@@ -499,6 +500,7 @@ func (c *Config) normalizeTasks() {
 		if len(task.OutputPaths) == 0 && len(task.Outputs) > 0 {
 			task.OutputPaths = append(task.OutputPaths, task.Outputs...)
 		}
+		task.Script = strings.TrimSpace(task.Script)
 		if task.OnlyOn != nil {
 			task.OnlyOn.Branches = dedupeStrings(task.OnlyOn.Branches)
 			task.OnlyOn.Tags = dedupeStrings(task.OnlyOn.Tags)
@@ -875,6 +877,9 @@ func validateTask(path string, task *Task, cfg *Config, issues *[]string, checkD
 		}
 	}
 
+	if task.Script != "" && len(task.Run) > 0 {
+		*issues = append(*issues, fmt.Sprintf("%s.script cannot be used with %s.run", path, path))
+	}
 	for i, cmd := range task.Run {
 		if strings.TrimSpace(cmd) == "" {
 			*issues = append(*issues, fmt.Sprintf("%s.run[%d] must not be empty", path, i))
@@ -1370,7 +1375,7 @@ func taskHasActions(task *Task) bool {
 	if task == nil {
 		return false
 	}
-	if len(task.Run) > 0 || len(task.Pre) > 0 || len(task.Post) > 0 || task.Docker != nil {
+	if task.Script != "" || len(task.Run) > 0 || len(task.Pre) > 0 || len(task.Post) > 0 || task.Docker != nil {
 		return true
 	}
 	if task.Split != nil || task.Validate != nil || task.Stats != nil || task.Metrics != nil || task.Canary != nil {

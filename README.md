@@ -17,7 +17,7 @@ curl -fsSL https://raw.githubusercontent.com/vietrix/vbuild/main/scripts/install
 Pin a version:
 
 ```sh
-VBUILD_VERSION=v0.1.1 curl -fsSL https://raw.githubusercontent.com/vietrix/vbuild/main/scripts/install.sh | sh
+VBUILD_VERSION=v0.1.2 curl -fsSL https://raw.githubusercontent.com/vietrix/vbuild/main/scripts/install.sh | sh
 ```
 
 ### Windows (PowerShell)
@@ -29,7 +29,7 @@ iwr -useb https://raw.githubusercontent.com/vietrix/vbuild/main/scripts/install.
 Pin a version:
 
 ```powershell
-$env:VBUILD_VERSION = "v0.1.1"; iwr -useb https://raw.githubusercontent.com/vietrix/vbuild/main/scripts/install.ps1 | iex
+$env:VBUILD_VERSION = "v0.1.2"; iwr -useb https://raw.githubusercontent.com/vietrix/vbuild/main/scripts/install.ps1 | iex
 ```
 
 ## Usage
@@ -46,7 +46,7 @@ vbuild script -- --flag # pass args to a task
 vbuild --version        # print version
 vbuild -V               # short version flag
 vbuild update           # update to latest release
-vbuild update --to v0.1.1
+vbuild update --to v0.1.2
 vbuild list --json      # list tasks as JSON
 vbuild graph --format dot
 vbuild watch <task>     # re-run on file changes
@@ -145,6 +145,7 @@ Additional config features:
 - `defaults` for timeout/shell/workdir/retries/backoff/jitter.
 - `aliases` for alternate task names.
 - `pass_args` to allow CLI args in tasks (`{{ARGS}}`, `{{ARG_0}}`, `{{ARGC}}`).
+- `script` for single-command tasks with pass-through args and `{name}` placeholders.
 - `fail_fast` to stop DAG execution on the first failure.
 - `templates` + `use`/`with` for reusable task blocks.
 - `include` to merge additional YAML configs (local file, URL, or glob).
@@ -190,6 +191,39 @@ Additional config features:
 - `snapshot` for environment/config capture.
 - `checkpoint`, `model_card`, `notebook`, and `export` for ML artifacts.
 - `offline` to enforce offline mode for model hubs.
+
+## Script tasks
+
+Shorthand for a single command that can receive CLI args.
+
+```yaml
+tasks:
+  train:
+    script: python train.py
+```
+
+Run with free-form flags:
+
+```sh
+vbuild train -- --seed 42
+vbuild train --seed 42
+```
+
+Named placeholders:
+
+```yaml
+tasks:
+  train:
+    script: python train.py {dir} {out}
+```
+
+```sh
+vbuild train --dir=data --out=dist
+```
+
+Placeholders accept letters, numbers, and `_`. Flags like `--data-dir` map to `{data_dir}`.
+Flags passed as `--key=value` are also available as `{{KEY}}` / `{{VBUILD_ARG_KEY}}` (uppercased, `-` -> `_`).
+`script` tasks accept args automatically (no need for `pass_args: true`).
 
 ## Aliases and namespaces
 

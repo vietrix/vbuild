@@ -68,7 +68,7 @@ func (r *Runner) printDryRun(plan *taskPlan) {
 			continue
 		}
 		vars := r.taskVars(plan, name, task)
-		commands := r.taskCommands(task, vars)
+		commands := r.taskCommands(name, task, vars)
 		if len(commands) == 0 {
 			continue
 		}
@@ -101,7 +101,7 @@ func (r *Runner) printDryRunJSON(plan *taskPlan) {
 			continue
 		}
 		vars := r.taskVars(plan, name, task)
-		commands := r.taskCommands(task, vars)
+		commands := r.taskCommands(name, task, vars)
 		if len(commands) == 0 {
 			continue
 		}
@@ -378,14 +378,24 @@ func (r *Runner) runTask(ctx context.Context, plan *taskPlan, name string, task 
 		return taskResult{name: name, status: statusFailed, err: err}
 	}
 
-	commands := r.taskCommands(task, vars)
+	var benchResult *benchmarkResult
+	commands, missingArgs := r.buildCommands(name, task, vars)
+	if len(missingArgs) > 0 {
+		message := formatMissingArgs(name, missingArgs)
+		runErr := fmt.Errorf(message)
+		_ = r.runPlugins(ctx, "task_end", name, "failed", time.Since(start))
+		endTrace(statusFailed, time.Since(start))
+		if experimentRun != nil {
+			_ = r.finishExperiment(experimentRun, "failed", time.Since(start), datasetInputs, nil, nil, benchResult)
+		}
+		return taskResult{name: name, duration: time.Since(start), status: statusFailed, err: runErr}
+	}
 	if task.Benchmark != nil && len(commands) == 0 {
 		runErr := fmt.Errorf("task %s benchmark requires run commands", name)
 		_ = r.runPlugins(ctx, "task_end", name, "failed", time.Since(start))
 		endTrace(statusFailed, time.Since(start))
 		return taskResult{name: name, duration: time.Since(start), status: statusFailed, err: runErr}
 	}
-	var benchResult *benchmarkResult
 	if !taskHasWork(task, commands) {
 		duration := time.Since(start)
 		r.recordOutputs(name, task, vars)
@@ -734,8 +744,23 @@ func (r *Runner) taskVars(plan *taskPlan, name string, task *config.Task) map[st
 	return vars
 }
 
-func (r *Runner) taskCommands(task *config.Task, vars map[string]string) []string {
+func (r *Runner) taskCommands(taskName string, task *config.Task, vars map[string]string) []string {
+	commands, _ := r.buildCommands(taskName, task, vars)
+	return commands
+}
+
+func (r *Runner) buildCommands(taskName string, task *config.Task, vars map[string]string) ([]string, []string) {
 	commands := append([]string(nil), task.Run...)
+	missing := []string{}
+	if task.Script != "" {
+		cmd, missingArgs := r.buildScriptCommand(taskName, task)
+		if cmd != "" {
+			commands = append(commands, cmd)
+		}
+		if len(missingArgs) > 0 {
+			missing = append(missing, missingArgs...)
+		}
+	}
 	if task.Docker != nil {
 		docker := dockerCommands(task.Docker, vars)
 		if len(commands) == 0 {
@@ -744,7 +769,7 @@ func (r *Runner) taskCommands(task *config.Task, vars map[string]string) []strin
 			commands = append(commands, docker...)
 		}
 	}
-	return commands
+	return commands, missing
 }
 
 func (r *Runner) applyExports(task *config.Task, vars map[string]string) {

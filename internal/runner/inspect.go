@@ -33,7 +33,7 @@ func (r *Runner) Inspect(taskName string, out io.Writer) error {
 	}
 	vars := r.taskVars(plan, taskName, task)
 	env := r.taskEnv(vars, task)
-	rawCommands := r.taskCommands(task, vars)
+	rawCommands := r.taskCommands(taskName, task, vars)
 	commands := make([]string, 0, len(rawCommands))
 	for _, cmd := range rawCommands {
 		commands = append(commands, expandVars(cmd, vars))
