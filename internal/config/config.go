@@ -9,34 +9,34 @@ import (
 )
 
 type Config struct {
-	Path         string            `yaml:"-"`
-	Hash         string            `yaml:"-"`
-	Workflow     string            `yaml:"workflow"`
-	Include      []string          `yaml:"include"`
-	EnvFile      string            `yaml:"env_file"`
-	ArtifactsDir string            `yaml:"artifacts_dir"`
-	Timeout      string            `yaml:"timeout"`
-	Seed         int64             `yaml:"seed"`
-	SeedEnv      map[string]string `yaml:"seed_env"`
-	Offline      *OfflineSpec      `yaml:"offline"`
-	Resources    *ResourcePool     `yaml:"resources"`
+	Path         string              `yaml:"-"`
+	Hash         string              `yaml:"-"`
+	Workflow     string              `yaml:"workflow"`
+	Include      []string            `yaml:"include"`
+	EnvFile      string              `yaml:"env_file"`
+	ArtifactsDir string              `yaml:"artifacts_dir"`
+	Timeout      string              `yaml:"timeout"`
+	Seed         int64               `yaml:"seed"`
+	SeedEnv      map[string]string   `yaml:"seed_env"`
+	Offline      *OfflineSpec        `yaml:"offline"`
+	Resources    *ResourcePool       `yaml:"resources"`
 	Datasets     map[string]*Dataset `yaml:"datasets"`
 	Experiments  *ExperimentDefaults `yaml:"experiments"`
-	Registry     *RegistrySpec     `yaml:"registry"`
-	Snapshot     *SnapshotSpec     `yaml:"snapshot"`
-	Defaults     *Defaults         `yaml:"defaults"`
-	FailFast     bool              `yaml:"fail_fast"`
-	CacheRemote  *CacheRemote      `yaml:"cache_remote"`
-	Artifacts    *ArtifactsUpload  `yaml:"artifacts_upload"`
-	LogPlugins   []Plugin          `yaml:"log_plugins"`
-	Secrets      []string          `yaml:"secrets"`
-	Vars         map[string]string `yaml:"vars"`
-	Env          map[string]string `yaml:"env"`
-	Templates    map[string]*Task  `yaml:"templates"`
-	Tasks        map[string]*Task  `yaml:"tasks"`
-	Plugins      []Plugin          `yaml:"plugins"`
-	Aliases      map[string]string `yaml:"-"`
-	Sources      []string          `yaml:"-"`
+	Registry     *RegistrySpec       `yaml:"registry"`
+	Snapshot     *SnapshotSpec       `yaml:"snapshot"`
+	Defaults     *Defaults           `yaml:"defaults"`
+	FailFast     bool                `yaml:"fail_fast"`
+	CacheRemote  *CacheRemote        `yaml:"cache_remote"`
+	Artifacts    *ArtifactsUpload    `yaml:"artifacts_upload"`
+	LogPlugins   []Plugin            `yaml:"log_plugins"`
+	Secrets      []string            `yaml:"secrets"`
+	Vars         map[string]string   `yaml:"vars"`
+	Env          map[string]string   `yaml:"env"`
+	Templates    map[string]*Task    `yaml:"templates"`
+	Tasks        map[string]*Task    `yaml:"tasks"`
+	Plugins      []Plugin            `yaml:"plugins"`
+	Aliases      map[string]string   `yaml:"-"`
+	Sources      []string            `yaml:"-"`
 }
 
 type Defaults struct {
@@ -52,6 +52,7 @@ type Defaults struct {
 type Task struct {
 	Desc             string              `yaml:"desc"`
 	Aliases          []string            `yaml:"aliases"`
+	PassArgs         bool                `yaml:"pass_args"`
 	Deps             []string            `yaml:"deps"`
 	Needs            []string            `yaml:"needs"`
 	DependsOn        []ConditionalDep    `yaml:"depends_on"`
@@ -208,16 +209,16 @@ type MetricsSpec struct {
 }
 
 type CanarySpec struct {
-	Baseline     string                 `yaml:"baseline"`
-	Rules        map[string]CanaryRule  `yaml:"rules"`
-	AllowMissing bool                   `yaml:"allow_missing"`
+	Baseline     string                `yaml:"baseline"`
+	Rules        map[string]CanaryRule `yaml:"rules"`
+	AllowMissing bool                  `yaml:"allow_missing"`
 }
 
 type CanaryRule struct {
-	Min          *float64 `yaml:"min"`
-	Max          *float64 `yaml:"max"`
-	MaxDelta     *float64 `yaml:"max_delta"`
-	MaxDeltaPct  *float64 `yaml:"max_delta_pct"`
+	Min         *float64 `yaml:"min"`
+	Max         *float64 `yaml:"max"`
+	MaxDelta    *float64 `yaml:"max_delta"`
+	MaxDeltaPct *float64 `yaml:"max_delta_pct"`
 }
 
 type BenchmarkSpec struct {

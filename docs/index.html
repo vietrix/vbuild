@@ -20,7 +20,7 @@
       <div class="brand-row">
         <div class="brand">
           <span class="logo">vbuild</span>
-          <span class="badge">v0.0.6</span>
+          <span class="badge">v0.1.1</span>
         </div>
         <button class="lang-toggle" id="langToggle" aria-pressed="false" aria-label="Toggle language">
           <span class="lang-inline lang-en">EN</span>
@@ -44,7 +44,7 @@
         <pre><code>workflow: "Research pipeline"
 
 vars:
-  VERSION: v0.0.6
+  VERSION: v0.1.1
 
 tasks:
   default:
@@ -187,14 +187,14 @@ tasks:
               <pre><code>curl -fsSL https://raw.githubusercontent.com/vietrix/vbuild/main/scripts/install.sh | sh
 
 # Pin a version
-VBUILD_VERSION=v0.0.6 curl -fsSL https://raw.githubusercontent.com/vietrix/vbuild/main/scripts/install.sh | sh</code></pre>
+VBUILD_VERSION=v0.1.1 curl -fsSL https://raw.githubusercontent.com/vietrix/vbuild/main/scripts/install.sh | sh</code></pre>
             </div>
             <div>
               <h3>Windows (PowerShell)</h3>
               <pre><code>iwr -useb https://raw.githubusercontent.com/vietrix/vbuild/main/scripts/install.ps1 | iex
 
 # Pin a version
-$env:VBUILD_VERSION = "v0.0.6"; iwr -useb https://raw.githubusercontent.com/vietrix/vbuild/main/scripts/install.ps1 | iex</code></pre>
+$env:VBUILD_VERSION = "v0.1.1"; iwr -useb https://raw.githubusercontent.com/vietrix/vbuild/main/scripts/install.ps1 | iex</code></pre>
             </div>
           </div>
         </div>
@@ -209,14 +209,14 @@ $env:VBUILD_VERSION = "v0.0.6"; iwr -useb https://raw.githubusercontent.com/viet
               <pre><code>curl -fsSL https://raw.githubusercontent.com/vietrix/vbuild/main/scripts/install.sh | sh
 
 # Ghim phiên bản
-VBUILD_VERSION=v0.0.6 curl -fsSL https://raw.githubusercontent.com/vietrix/vbuild/main/scripts/install.sh | sh</code></pre>
+VBUILD_VERSION=v0.1.1 curl -fsSL https://raw.githubusercontent.com/vietrix/vbuild/main/scripts/install.sh | sh</code></pre>
             </div>
             <div>
               <h3>Windows (PowerShell)</h3>
               <pre><code>iwr -useb https://raw.githubusercontent.com/vietrix/vbuild/main/scripts/install.ps1 | iex
 
 # Ghim phiên bản
-$env:VBUILD_VERSION = "v0.0.6"; iwr -useb https://raw.githubusercontent.com/vietrix/vbuild/main/scripts/install.ps1 | iex</code></pre>
+$env:VBUILD_VERSION = "v0.1.1"; iwr -useb https://raw.githubusercontent.com/vietrix/vbuild/main/scripts/install.ps1 | iex</code></pre>
             </div>
           </div>
         </div>
@@ -230,6 +230,7 @@ $env:VBUILD_VERSION = "v0.0.6"; iwr -useb https://raw.githubusercontent.com/viet
             <div><code>vbuild list</code><span>List tasks and descriptions.</span></div>
             <div><code>vbuild graph --format dot</code><span>Show task graph.</span></div>
             <div><code>vbuild --dry-run</code><span>Print commands without execution.</span></div>
+            <div><code>vbuild script -- --flag</code><span>Pass args to a task.</span></div>
             <div><code>vbuild --since 12h</code><span>Run tasks changed since a time.</span></div>
             <div><code>vbuild --until build</code><span>Run up to a target.</span></div>
             <div><code>vbuild --reverse cleanup</code><span>Reverse topo order.</span></div>
@@ -239,7 +240,7 @@ $env:VBUILD_VERSION = "v0.0.6"; iwr -useb https://raw.githubusercontent.com/viet
             <div><code>vbuild lineage --format json</code><span>Show lineage graph.</span></div>
             <div><code>vbuild registry push</code><span>Sync registry.</span></div>
             <div><code>vbuild report --out report.json</code><span>Generate compliance report.</span></div>
-            <div><code>vbuild update --to v0.0.6</code><span>Self-update binary.</span></div>
+            <div><code>vbuild update --to v0.1.1</code><span>Self-update binary.</span></div>
           </div>
           <p class="muted">Run <code>vbuild help</code> for the full list of commands and flags.</p>
         </div>
@@ -250,6 +251,7 @@ $env:VBUILD_VERSION = "v0.0.6"; iwr -useb https://raw.githubusercontent.com/viet
             <div><code>vbuild list</code><span>Liệt kê task và mô tả.</span></div>
             <div><code>vbuild graph --format dot</code><span>Xem đồ thị task.</span></div>
             <div><code>vbuild --dry-run</code><span>In lệnh, không thực thi.</span></div>
+            <div><code>vbuild script -- --flag</code><span>Truyền args cho task.</span></div>
             <div><code>vbuild --since 12h</code><span>Chạy task thay đổi theo thời gian.</span></div>
             <div><code>vbuild --until build</code><span>Chạy tới task mục tiêu.</span></div>
             <div><code>vbuild --reverse cleanup</code><span>Chạy topo ngược.</span></div>
@@ -259,7 +261,7 @@ $env:VBUILD_VERSION = "v0.0.6"; iwr -useb https://raw.githubusercontent.com/viet
             <div><code>vbuild lineage --format json</code><span>Xem lineage.</span></div>
             <div><code>vbuild registry push</code><span>Đồng bộ registry.</span></div>
             <div><code>vbuild report --out report.json</code><span>Tạo báo cáo compliance.</span></div>
-            <div><code>vbuild update --to v0.0.6</code><span>Tự cập nhật binary.</span></div>
+            <div><code>vbuild update --to v0.1.1</code><span>Tự cập nhật binary.</span></div>
           </div>
           <p class="muted">Chạy <code>vbuild help</code> để xem đầy đủ lệnh và cờ.</p>
         </div>
@@ -284,7 +286,7 @@ include:
 
 vars:
   DATA_ROOT: data
-  VERSION: v0.0.6
+  VERSION: v0.1.1
 
 env:
   PYTHONUNBUFFERED: "1"
@@ -339,7 +341,7 @@ include:
 
 vars:
   DATA_ROOT: data
-  VERSION: v0.0.6
+  VERSION: v0.1.1
 
 env:
   PYTHONUNBUFFERED: "1"
@@ -399,6 +401,7 @@ tasks:
           <h3>Task keys</h3>
           <ul class="bullet">
             <li><strong>run</strong>, <strong>pre</strong>, <strong>post</strong>, <strong>workdir</strong>, <strong>run_dir</strong>, <strong>shell</strong>.</li>
+            <li><strong>pass_args</strong>: allow CLI args via <code>{{ARGS}}</code>, <code>{{ARG_0}}</code>, <code>{{ARGC}}</code>.</li>
             <li><strong>deps</strong>, <strong>depends_on</strong>, <strong>parallel</strong>, <strong>fanout</strong>, <strong>matrix</strong>, <strong>sweep</strong>.</li>
             <li><strong>when</strong>, <strong>only_on</strong>, <strong>confirm</strong>, <strong>allow_failure</strong>, <strong>continue_on_error</strong>.</li>
             <li><strong>retries</strong>, <strong>max_retries</strong>, <strong>retry_on_exit_codes</strong>, <strong>retry_on_regex</strong>, <strong>retry_on_signal</strong>.</li>
@@ -431,6 +434,7 @@ tasks:
           <h3>Khóa cho task</h3>
           <ul class="bullet">
             <li><strong>run</strong>, <strong>pre</strong>, <strong>post</strong>, <strong>workdir</strong>, <strong>run_dir</strong>, <strong>shell</strong>.</li>
+            <li><strong>pass_args</strong>: cho phép truyền args từ CLI qua <code>{{ARGS}}</code>, <code>{{ARG_0}}</code>, <code>{{ARGC}}</code>.</li>
             <li><strong>deps</strong>, <strong>depends_on</strong>, <strong>parallel</strong>, <strong>fanout</strong>, <strong>matrix</strong>, <strong>sweep</strong>.</li>
             <li><strong>when</strong>, <strong>only_on</strong>, <strong>confirm</strong>, <strong>allow_failure</strong>, <strong>continue_on_error</strong>.</li>
             <li><strong>retries</strong>, <strong>max_retries</strong>, <strong>retry_on_exit_codes</strong>, <strong>retry_on_regex</strong>, <strong>retry_on_signal</strong>.</li>
@@ -452,6 +456,7 @@ tasks:
             <li><strong>vars</strong> expand in commands as <code>{{VAR}}</code>. You can override them with <code>VBUILD_VAR_NAME</code>.</li>
             <li><strong>env</strong> merges OS env → global env → task env → exports.</li>
             <li><strong>exports</strong> propagate to downstream tasks.</li>
+            <li><strong>pass_args</strong> tasks expose <code>{{ARGS}}</code>, <code>{{ARG_0}}</code>, and <code>{{ARGC}}</code> from the CLI.</li>
             <li><code>--export-env</code> writes the resolved environment to a file.</li>
             <li><code>--print-vars</code> prints resolved variables for a task.</li>
           </ul>
@@ -472,6 +477,7 @@ tasks:
             <li><strong>vars</strong> được thay trong lệnh dưới dạng <code>{{VAR}}</code>. Có thể override bằng <code>VBUILD_VAR_NAME</code>.</li>
             <li><strong>env</strong> được merge theo thứ tự: OS → global → task → exports.</li>
             <li><strong>exports</strong> truyền sang task downstream.</li>
+            <li>Task có <code>pass_args</code> sẽ có <code>{{ARGS}}</code>, <code>{{ARG_0}}</code>, <code>{{ARGC}}</code> từ CLI.</li>
             <li><code>--export-env</code> ghi environment đã resolve ra file.</li>
             <li><code>--print-vars</code> in các biến đã resolve.</li>
           </ul>

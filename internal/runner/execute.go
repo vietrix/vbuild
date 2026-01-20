@@ -730,6 +730,7 @@ func (r *Runner) taskVars(plan *taskPlan, name string, task *config.Task) map[st
 			vars[key] = value
 		}
 	}
+	r.applyArgsVars(name, task, vars)
 	return vars
 }
 

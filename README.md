@@ -17,7 +17,7 @@ curl -fsSL https://raw.githubusercontent.com/vietrix/vbuild/main/scripts/install
 Pin a version:
 
 ```sh
-VBUILD_VERSION=v0.0.6 curl -fsSL https://raw.githubusercontent.com/vietrix/vbuild/main/scripts/install.sh | sh
+VBUILD_VERSION=v0.1.1 curl -fsSL https://raw.githubusercontent.com/vietrix/vbuild/main/scripts/install.sh | sh
 ```
 
 ### Windows (PowerShell)
@@ -29,7 +29,7 @@ iwr -useb https://raw.githubusercontent.com/vietrix/vbuild/main/scripts/install.
 Pin a version:
 
 ```powershell
-$env:VBUILD_VERSION = "v0.0.6"; iwr -useb https://raw.githubusercontent.com/vietrix/vbuild/main/scripts/install.ps1 | iex
+$env:VBUILD_VERSION = "v0.1.1"; iwr -useb https://raw.githubusercontent.com/vietrix/vbuild/main/scripts/install.ps1 | iex
 ```
 
 ## Usage
@@ -42,10 +42,11 @@ vbuild list             # list tasks
 vbuild --file other.yml # use alternate config
 vbuild --dry-run        # print commands only
 vbuild --dry-run=json   # emit JSON plan
+vbuild script -- --flag # pass args to a task
 vbuild --version        # print version
 vbuild -V               # short version flag
 vbuild update           # update to latest release
-vbuild update --to v0.0.6
+vbuild update --to v0.1.1
 vbuild list --json      # list tasks as JSON
 vbuild graph --format dot
 vbuild watch <task>     # re-run on file changes
@@ -143,6 +144,7 @@ Notes:
 Additional config features:
 - `defaults` for timeout/shell/workdir/retries/backoff/jitter.
 - `aliases` for alternate task names.
+- `pass_args` to allow CLI args in tasks (`{{ARGS}}`, `{{ARG_0}}`, `{{ARGC}}`).
 - `fail_fast` to stop DAG execution on the first failure.
 - `templates` + `use`/`with` for reusable task blocks.
 - `include` to merge additional YAML configs (local file, URL, or glob).

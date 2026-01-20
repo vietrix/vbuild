@@ -2,7 +2,7 @@
 
 vars:
   APP: vbuild
-  VERSION: v0.0.6
+  VERSION: v0.1.1
 
 env:
   CGO_ENABLED: "0"

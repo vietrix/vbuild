@@ -76,6 +76,7 @@ func printUsage(out io.Writer) {
 	fmt.Fprintln(out, "  vbuild build test")
 	fmt.Fprintln(out, "  vbuild --dry-run")
 	fmt.Fprintln(out, "  vbuild --dry-run=json")
+	fmt.Fprintln(out, "  vbuild script -- --flag")
 	fmt.Fprintln(out, "  vbuild only-changed --base origin/main")
 }
 

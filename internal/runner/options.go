@@ -23,4 +23,6 @@ type Options struct {
 	Timeout         time.Duration
 	TimelinePath    string
 	SummaryPath     string
+	ArgsTarget      string
+	Args            []string
 }

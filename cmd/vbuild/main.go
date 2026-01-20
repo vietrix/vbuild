@@ -134,10 +134,18 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 
 	if *exportEnv || *printVars {
-		taskName := "default"
-		if len(rest) > 0 {
-			taskName = rest[0]
+		targets, passArgs, argsTarget, err := prepareTargets(cfg, rest)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
 		}
+		if len(targets) == 0 {
+			fmt.Fprintln(stderr, "task name is required")
+			return 1
+		}
+		opts.Args = passArgs
+		opts.ArgsTarget = argsTarget
+		taskName := targets[0]
 		resolved, err := resolveSingleTarget(cfg, taskName)
 		if err != nil {
 			fmt.Fprintln(stderr, err)
@@ -193,10 +201,17 @@ func run(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 
-	targets := []string{"default"}
-	if len(rest) > 0 {
-		targets = rest
+	targets, passArgs, argsTarget, err := prepareTargets(cfg, rest)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
 	}
+	if len(targets) == 0 {
+		fmt.Fprintln(stderr, "task name is required")
+		return 1
+	}
+	opts.Args = passArgs
+	opts.ArgsTarget = argsTarget
 	resolvedTargets, err := resolveTargets(cfg, targets)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
@@ -472,4 +487,98 @@ func parseSince(value string) (time.Time, error) {
 		return time.Unix(unix, 0), nil
 	}
 	return time.Time{}, fmt.Errorf("invalid since value: %s", value)
+}
+
+func prepareTargets(cfg *config.Config, rest []string) ([]string, []string, string, error) {
+	targets := rest
+	passArgs := []string{}
+	argsTarget := ""
+	if len(rest) > 0 {
+		parsedTargets, parsedArgs, target, err := parseTargetsAndArgs(cfg, rest)
+		if err != nil {
+			return nil, nil, "", err
+		}
+		targets = parsedTargets
+		passArgs = parsedArgs
+		argsTarget = target
+	}
+	if len(targets) == 0 {
+		targets = []string{"default"}
+	}
+	if argsTarget == "" && len(targets) == 1 {
+		resolved, err := resolveTarget(cfg, targets[0])
+		if err != nil {
+			return nil, nil, "", err
+		}
+		if len(resolved) == 1 {
+			task := cfg.Tasks[resolved[0]]
+			if task != nil && task.PassArgs {
+				argsTarget = resolved[0]
+			}
+		}
+	}
+	return targets, passArgs, argsTarget, nil
+}
+
+func parseTargetsAndArgs(cfg *config.Config, rest []string) ([]string, []string, string, error) {
+	targets, passArgs, explicit := splitArgs(rest)
+	if explicit {
+		if len(targets) == 0 {
+			return nil, nil, "", fmt.Errorf("task name is required before --")
+		}
+		if len(targets) != 1 {
+			return nil, nil, "", fmt.Errorf("pass-through args require a single task")
+		}
+		resolved, err := resolveSingleTarget(cfg, targets[0])
+		if err != nil {
+			return nil, nil, "", err
+		}
+		task := cfg.Tasks[resolved]
+		if task == nil || !task.PassArgs {
+			return nil, nil, "", argsNotAllowedError(resolved)
+		}
+		return targets, passArgs, resolved, nil
+	}
+	if len(rest) > 1 {
+		resolved, err := resolveTarget(cfg, rest[0])
+		if err != nil {
+			return nil, nil, "", err
+		}
+		if len(resolved) == 1 {
+			task := cfg.Tasks[resolved[0]]
+			if task != nil && task.PassArgs {
+				if isFlagLike(rest[1]) || !isResolvableTask(cfg, rest[1]) {
+					return []string{rest[0]}, rest[1:], resolved[0], nil
+				}
+			} else if isFlagLike(rest[1]) {
+				return nil, nil, "", argsNotAllowedError(resolved[0])
+			}
+		}
+	}
+	return rest, nil, "", nil
+}
+
+func splitArgs(rest []string) ([]string, []string, bool) {
+	for i, arg := range rest {
+		if arg == "--" {
+			return rest[:i], rest[i+1:], true
+		}
+	}
+	return rest, nil, false
+}
+
+func isResolvableTask(cfg *config.Config, name string) bool {
+	if cfg == nil {
+		return false
+	}
+	_, err := resolveTarget(cfg, name)
+	return err == nil
+}
+
+func isFlagLike(value string) bool {
+	return strings.HasPrefix(value, "-") && value != "-"
+}
+
+func argsNotAllowedError(task string) error {
+	return fmt.Errorf("task %s does not accept args (set pass_args: true)", task)
 }
